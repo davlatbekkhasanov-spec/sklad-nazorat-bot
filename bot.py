@@ -35,6 +35,7 @@ if not ADMIN_ID:
 if not GROUP_ID:
     raise ValueError("GROUP_ID topilmadi. .env faylni tekshiring.")
 
+
 DEFAULT_PASSWORDS = {
     "Ражаббоев Пулат": "431205",
     "Ядуллаев Умид": "582614",
@@ -62,10 +63,6 @@ def clean_text(value) -> str:
 
 def is_private(message: Message) -> bool:
     return message.chat.type == ChatType.PRIVATE
-
-
-def is_group(message: Message) -> bool:
-    return message.chat.type in {ChatType.GROUP, ChatType.SUPERGROUP}
 
 
 def is_admin(user_id: int) -> bool:
@@ -159,7 +156,9 @@ def table_columns(table_name: str) -> set:
 def ensure_column(table_name: str, column_name: str, sql_def: str):
     cols = table_columns(table_name)
     if column_name not in cols:
-        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_def}")
+        # SQLite ALTER TABLE орқали UNIQUE qo‘shib bo‘lmaydi
+        safe_sql_def = sql_def.replace(" UNIQUE", "")
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {safe_sql_def}")
 
 
 def setup_db():
@@ -169,7 +168,7 @@ def setup_db():
         name TEXT UNIQUE NOT NULL
     )
     """)
-    ensure_column("employees", "telegram_id", "INTEGER UNIQUE")
+    ensure_column("employees", "telegram_id", "INTEGER")
     ensure_column("employees", "password", "TEXT")
     ensure_column("employees", "role", "TEXT NOT NULL DEFAULT 'employee'")
     ensure_column("employees", "is_active", "INTEGER NOT NULL DEFAULT 1")
@@ -223,6 +222,14 @@ def setup_db():
         logged_in_at TEXT NOT NULL
     )
     """)
+
+    # telegram_id uchun unique index
+    cursor.execute("""
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_telegram_id
+    ON employees(telegram_id)
+    WHERE telegram_id IS NOT NULL
+    """)
+
     conn.commit()
 
     cursor.execute(
@@ -425,15 +432,7 @@ class SubmitState(StatesGroup):
 
 
 # ==========================================
-# GROUP SILENT MODE
-# ==========================================
-@dp.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
-async def group_silent(message: Message):
-    return
-
-
-# ==========================================
-# GROUP REPORT COMMANDS
+# GROUP COMMANDS
 # ==========================================
 @dp.message(Command("hisobot"), F.chat.id == GROUP_ID)
 async def group_full_report(message: Message):
