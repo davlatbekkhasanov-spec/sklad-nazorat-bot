@@ -17,7 +17,8 @@ SCALE = 2
 MARGIN = 44
 LIST_LINE = 28
 MAX_FOLDER_LINES = 12
-BASE_H = 520
+BASE_H = 500
+FOOTER_ZONE = 56
 
 
 @dataclass
@@ -77,9 +78,15 @@ def _pick_theme(data: ReportCardData) -> str:
 
 
 def _card_height(folder_count: int) -> int:
-    lines = min(max(folder_count, 0), MAX_FOLDER_LINES)
-    extra = 56 + lines * LIST_LINE if lines else 0
-    return BASE_H + extra + 24
+    h = BASE_H
+    if folder_count > 0:
+        shown = min(folder_count, MAX_FOLDER_LINES)
+        h += 44 + shown * LIST_LINE
+        if folder_count > MAX_FOLDER_LINES:
+            h += LIST_LINE
+        h += 20
+    h += FOOTER_ZONE
+    return h
 
 
 def _truncate(text: str, limit: int = 46) -> str:
@@ -239,8 +246,12 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         )
 
     y += panel_h + 24 * SCALE
+    content_bottom = y
     if folders:
-        list_h = min(len(folders), MAX_FOLDER_LINES) * LIST_LINE * SCALE + 40 * SCALE
+        shown = folders[-MAX_FOLDER_LINES:]
+        hidden = len(folders) - len(shown)
+        list_rows = len(shown) + (1 if hidden > 0 else 0)
+        list_h = (40 + list_rows * LIST_LINE) * SCALE
         draw.rounded_rectangle(
             (M + 12 * SCALE, y, W - M - 12 * SCALE, y + list_h),
             radius=14 * SCALE,
@@ -250,8 +261,6 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         )
         draw.text((M + 28 * SCALE, y + 12 * SCALE), "Саналган папкалар", fill=theme["accent"], font=font_small)
         ly = y + 40 * SCALE
-        shown = folders[-MAX_FOLDER_LINES:]
-        hidden = len(folders) - len(shown)
         current = data.folder_name.strip()
         start_n = len(folders) - len(shown) + 1
         for i, name in enumerate(shown, start=start_n):
@@ -263,14 +272,25 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
             ly += LIST_LINE * SCALE
         if hidden > 0:
             draw.text((M + 28 * SCALE, ly), f"… ва яна {hidden} та (юқорида)", fill=muted, font=font_small)
+            ly += LIST_LINE * SCALE
+        content_bottom = y + list_h
 
-    footer = H - 44 * SCALE
-    draw.text((M + 16 * SCALE, footer), format_submitted_at_display(data.submitted_at), fill=muted, font=font_small)
+    footer_y = content_bottom + 20 * SCALE
+    bottom_needed = int(footer_y + 36 * SCALE)
+    if bottom_needed > H:
+        extended = Image.new("RGB", (W, bottom_needed), theme["bg"])
+        extended.paste(img, (0, 0))
+        img = extended
+        draw = ImageDraw.Draw(img)
+        draw.rounded_rectangle((M, M, W - M, bottom_needed - M), radius=20 * SCALE, outline=theme["header"], width=3 * SCALE)
+
+    draw.text((M + 16 * SCALE, footer_y), format_submitted_at_display(data.submitted_at), fill=muted, font=font_small)
     brand = "SKLAD NAZORAT"
     bw = draw.textlength(brand, font=font_small)
-    draw.text((W - M - 16 * SCALE - bw, footer), brand, fill=theme["header"], font=font_small)
+    draw.text((W - M - 16 * SCALE - bw, footer_y), brand, fill=theme["header"], font=font_small)
 
-    return img.resize((OUTPUT_W, card_h), Image.Resampling.LANCZOS)
+    out_h = max(card_h, int(bottom_needed / SCALE) + 4)
+    return img.crop((0, 0, W, min(bottom_needed, img.height))).resize((OUTPUT_W, out_h), Image.Resampling.LANCZOS)
 
 
 def build_report_card_data(
