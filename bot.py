@@ -387,7 +387,86 @@ def import_from_excel(excel_path: str):
     return f"Импорт тайёр: ходим={added_employees}, папка={added_folders}, бириктириш={added_assignments}"
 
 
-startup_import_result = import_from_excel(EXCEL_FILE)
+def sync_assignments_from_excel(excel_path: str) -> str:
+    """Excel bo‘yicha biriktmalarni DB bilan moslashtiradi (ortiqchalarini o‘chiradi)."""
+    import_default_employees()
+
+    if not os.path.exists(excel_path):
+        ensure_default_passwords()
+        return f"Excel file topilmadi: {excel_path}"
+
+    df = pd.read_excel(excel_path)
+    required_cols = {"Наименование", "Центральный склад"}
+    if not required_cols.issubset(set(df.columns)):
+        ensure_default_passwords()
+        return "Excel format mos emas. Керакли устунлар: Наименование, Центральный склад"
+
+    added_employees = 0
+    added_folders = 0
+    desired_ids = set()
+
+    for _, row in df.iterrows():
+        folder_name = clean_text(row.get("Наименование"))
+        employee_name = clean_text(row.get("Центральный склад"))
+
+        if not folder_name or not employee_name:
+            continue
+        if folder_name.lower() == "nan" or employee_name.lower() == "nan":
+            continue
+
+        cursor.execute("SELECT id FROM employees WHERE name = ?", (employee_name,))
+        emp = cursor.fetchone()
+        if not emp:
+            cursor.execute(
+                "INSERT INTO employees (name, role, is_active, created_at) VALUES (?, 'employee', 1, ?)",
+                (employee_name, now_str())
+            )
+            employee_id = cursor.lastrowid
+            added_employees += 1
+        else:
+            employee_id = emp["id"]
+
+        cursor.execute("SELECT id FROM folders WHERE name = ?", (folder_name,))
+        fld = cursor.fetchone()
+        if not fld:
+            cursor.execute(
+                "INSERT INTO folders (name, created_at) VALUES (?, ?)",
+                (folder_name, now_str())
+            )
+            folder_id = cursor.lastrowid
+            added_folders += 1
+        else:
+            folder_id = fld["id"]
+
+        desired_ids.add((employee_id, folder_id))
+
+    cursor.execute("SELECT id, employee_id, folder_id FROM assignments")
+    removed = 0
+    for row in cursor.fetchall():
+        if (row["employee_id"], row["folder_id"]) not in desired_ids:
+            cursor.execute("DELETE FROM assignments WHERE id = ?", (row["id"],))
+            removed += 1
+
+    added = 0
+    for employee_id, folder_id in desired_ids:
+        try:
+            cursor.execute(
+                "INSERT INTO assignments (employee_id, folder_id) VALUES (?, ?)",
+                (employee_id, folder_id)
+            )
+            added += 1
+        except sqlite3.IntegrityError:
+            pass
+
+    conn.commit()
+    ensure_default_passwords()
+    return (
+        f"Синхрон тайёр: жами={len(desired_ids)}, қўшилди={added}, ўчирилди={removed}, "
+        f"ходим+={added_employees}, папка+={added_folders}"
+    )
+
+
+startup_import_result = sync_assignments_from_excel(EXCEL_FILE)
 
 
 # ==========================================
@@ -1126,7 +1205,7 @@ async def excel_import_handler(message: Message):
     if not is_admin(message.from_user.id):
         return await message.answer("⛔ Сиз админ эмассиз.")
 
-    result = import_from_excel(EXCEL_FILE)
+    result = sync_assignments_from_excel(EXCEL_FILE)
     await message.answer(f"✅ {result}")
 
 
@@ -1486,7 +1565,7 @@ async def reimport_command(message: Message):
         return
     if not is_admin(message.from_user.id):
         return await message.answer("⛔ Сиз админ эмассиз.")
-    result = import_from_excel(EXCEL_FILE)
+    result = sync_assignments_from_excel(EXCEL_FILE)
     await message.answer(f"✅ {result}")
 
 
