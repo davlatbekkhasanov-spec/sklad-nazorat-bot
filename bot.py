@@ -15,6 +15,7 @@ from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    BufferedInputFile,
     CallbackQuery,
     Message,
     ReplyKeyboardMarkup,
@@ -32,6 +33,7 @@ from bot_ui import (
     he,
     inline_yes_no,
 )
+from report_card import build_report_card_data, render_report_card_png
 
 load_dotenv()
 
@@ -63,6 +65,69 @@ DEFAULT_PASSWORDS = {
 # ==========================================
 # HELPERS
 # ==========================================
+def use_group_report_card() -> bool:
+    return os.getenv("GROUP_REPORT_CARD", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+async def send_submission_to_group(
+    bot: Bot,
+    *,
+    cycle_title: str,
+    employee_name: str,
+    folder_name: str,
+    counted_ok: int,
+    location_ok: int,
+    wrong_location_count: int,
+    fixed_now,
+    comment: str,
+    submitted_at: str,
+    day_done: int,
+    day_total: int,
+) -> str:
+    """Guruhga PNG kartochka (yoki matn fallback). Qaytadi: xodim uchun qisqa xabar."""
+    if use_group_report_card():
+        try:
+            card = build_report_card_data(
+                cycle_title=cycle_title,
+                employee_name=employee_name,
+                folder_name=folder_name,
+                counted_ok=counted_ok,
+                location_ok=location_ok,
+                wrong_location_count=wrong_location_count,
+                fixed_now=fixed_now,
+                comment=comment,
+                submitted_at=submitted_at,
+                day_done=day_done,
+                day_total=day_total,
+            )
+            png = render_report_card_png(card)
+            photo = BufferedInputFile(png, filename="tekshiruv.png")
+            caption = f"📦 {folder_name} · {employee_name}"
+            await bot.send_photo(GROUP_ID, photo, caption=caption)
+            return "Гуруҳга карточка юборилди."
+        except Exception:
+            pass  # matn fallback
+
+    report_text = format_submission_group_html(
+        cycle_title,
+        employee_name,
+        folder_name,
+        counted_ok=counted_ok,
+        location_ok=location_ok,
+        wrong_location_count=wrong_location_count,
+        fixed_now=fixed_now,
+        comment=comment,
+        submitted_at=submitted_at,
+        day_done=day_done,
+        day_total=day_total,
+    )
+    try:
+        await bot.send_message(GROUP_ID, report_text, parse_mode=ParseMode.HTML)
+        return "Гуруҳга юборилди."
+    except Exception as e:
+        return f"⚠️ Гуруҳга юборишда муаммо: {e}"
+
+
 def clean_text(value) -> str:
     text = str(value or "").strip()
     text = re.sub(r"^[◼▪•●■\-\s]+", "", text)
@@ -2008,10 +2073,11 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     conn.commit()
 
     stats = employee_work_stats(employee["id"], cycle["id"])
-    report_text = format_submission_group_html(
-        cycle["title"],
-        employee["name"],
-        folder_name,
+    group_note = await send_submission_to_group(
+        bot,
+        cycle_title=cycle["title"],
+        employee_name=employee["name"],
+        folder_name=folder_name,
         counted_ok=counted_ok,
         location_ok=location_ok,
         wrong_location_count=wrong_location_count,
@@ -2021,11 +2087,6 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
         day_done=stats["done"],
         day_total=stats["total"],
     )
-    try:
-        await bot.send_message(GROUP_ID, report_text, parse_mode=ParseMode.HTML)
-        group_note = "Гуруҳга юборилди."
-    except Exception as e:
-        group_note = f"⚠️ Гуруҳга юборишда муаммо: {e}"
 
     await state.clear()
     await message.answer(

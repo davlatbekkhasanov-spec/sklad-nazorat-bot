@@ -173,7 +173,7 @@ def format_submission_group_html(
     d_bar = percent_bar(day_pct)
 
     if quality >= 100 and day_total > 0 and day_done >= day_total:
-        header = "🎉 <b>ТЕКШИРУВ ТАЙЁР — 100%</b>"
+        header = "🎉 <b>ТЕКШИРУВ ТУГАДИ — 100%</b>"
     elif quality >= 100:
         header = "✅ <b>ТЕКШИРУВ — АЪЛО</b>"
     elif quality >= 60:

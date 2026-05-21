@@ -2,3 +2,4 @@ aiogram
 python-dotenv
 pandas
 openpyxl
+Pillow>=10.0.0
