@@ -99,7 +99,8 @@ def admin_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🔗 Папка бириктириш"), KeyboardButton(text="📌 Бириктирмалар")],
             [KeyboardButton(text="📥 Excel импорт")],
             [KeyboardButton(text="🚀 Янги цикл очиш"), KeyboardButton(text="🛑 Циклни ёпиш")],
-            [KeyboardButton(text="📈 Актив цикл ҳолати"), KeyboardButton(text="🗑 Ҳисоботни ўчириш")],
+            [KeyboardButton(text="📂 Қолган папкалар"), KeyboardButton(text="📈 Актив цикл ҳолати")],
+            [KeyboardButton(text="🗑 Ҳисоботни ўчириш")],
             [KeyboardButton(text="📋 Менга берилган папкалар"), KeyboardButton(text="📝 Актив текширувларим")],
             [KeyboardButton(text="📝 Текширув топшириш"), KeyboardButton(text="📊 Ҳолатим")],
             [KeyboardButton(text="🔓 Чиқиш"), KeyboardButton(text="❓ Ёрдам")],
@@ -122,6 +123,66 @@ def employee_menu() -> ReplyKeyboardMarkup:
 
 def current_menu(user_id: int):
     return admin_menu() if is_admin(user_id) else employee_menu()
+
+
+def get_remaining_folders_for_employee(employee_id: int, cycle_id: int) -> list:
+    cursor.execute(
+        """
+        SELECT f.id, f.name
+        FROM assignments a
+        JOIN folders f ON f.id = a.folder_id
+        WHERE a.employee_id = ?
+          AND f.id NOT IN (
+              SELECT folder_id
+              FROM submissions
+              WHERE employee_id = ? AND cycle_id = ?
+          )
+        ORDER BY f.name
+        """,
+        (employee_id, employee_id, cycle_id),
+    )
+    return cursor.fetchall()
+
+
+def build_admin_remaining_folders_report(cycle) -> list[str]:
+    cycle_id = cycle["id"]
+    cycle_title = cycle["title"]
+
+    cursor.execute(
+        """
+        SELECT DISTINCT e.id, e.name
+        FROM employees e
+        JOIN assignments a ON a.employee_id = e.id
+        ORDER BY e.name
+        """
+    )
+    employees = cursor.fetchall()
+    if not employees:
+        return ["Бириктирилган ходимлар йўқ."]
+
+    header = f"📂 ҚОЛГАН ПАПКАЛАР\n\nЦикл: {cycle_title}\n\n"
+    parts = []
+    current = header
+
+    for emp in employees:
+        rows = get_remaining_folders_for_employee(emp["id"], cycle_id)
+        block = f"🔹 {emp['name']} — {len(rows)} та қолди\n"
+        if rows:
+            for row in rows:
+                block += f"   • {row['name']}\n"
+        else:
+            block += "   ✅ Ҳаммаси топширилган\n"
+        block += "\n"
+
+        if len(current) + len(block) > 3500:
+            parts.append(current)
+            current = block
+        else:
+            current += block
+
+    if current.strip():
+        parts.append(current)
+    return parts
 
 
 def chunk_text(text: str, limit: int = 3500) -> list[str]:
@@ -611,6 +672,19 @@ async def group_employee_report(message: Message):
         await message.answer(part)
 
 
+@dp.message(Command("qolgan"), F.chat.id == GROUP_ID)
+async def group_remaining_folders_report(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    cycle = get_active_cycle() or get_cycle_for_reports()
+    if not cycle:
+        return await message.answer("Актив ёки охирги цикл топилмади.")
+
+    for part in build_admin_remaining_folders_report(cycle):
+        await message.answer(part)
+
+
 @dp.message(Command("papkalar"), F.chat.id == GROUP_ID)
 async def group_folder_report(message: Message):
     if message.from_user.id != ADMIN_ID:
@@ -778,7 +852,8 @@ async def help_handler(message: Message):
         "Бу бот склад назорати учун.\n\n"
         "• Ходимлар личкада ишлайди\n"
         "• Гуруҳга фақат якунланган ҳисобот кетади\n"
-        "• Гуруҳда /hisobot /hodimlar /papkalar командалари ишлайди\n"
+        "• Гуруҳда /hisobot /hodimlar /papkalar /qolgan командалари ишлайди\n"
+        "• Админ: 📂 Қолган папкалар — кимда неча ва қайси папка қолган\n"
         "• Админ ҳисоботни ўчира олади"
     )
 
@@ -854,6 +929,38 @@ async def active_checks_handler(message: Message):
     for row in rows:
         text += f"{row['id']}. {row['name']}\n"
     await message.answer(text)
+
+
+@dp.message(F.text == "📂 Қолган папкалар")
+async def admin_remaining_folders_handler(message: Message):
+    if not is_private(message):
+        return
+    if not is_admin(message.from_user.id):
+        return await message.answer("⛔ Сиз админ эмассиз.")
+
+    cycle = get_active_cycle()
+    if not cycle:
+        return await message.answer(
+            "Актив цикл йўқ.\nЯнги цикл очинг ёки охирги циклни кўриш учун гуруҳда /qolgan ишлатинг."
+        )
+
+    for part in build_admin_remaining_folders_report(cycle):
+        await message.answer(part, reply_markup=admin_menu())
+
+
+@dp.message(Command("qolgan"))
+async def admin_remaining_folders_command(message: Message):
+    if not is_private(message):
+        return
+    if not is_admin(message.from_user.id):
+        return await message.answer("⛔ Сиз админ эмассиз.")
+
+    cycle = get_active_cycle() or get_cycle_for_reports()
+    if not cycle:
+        return await message.answer("Актив ёки охирги цикл топилмади.")
+
+    for part in build_admin_remaining_folders_report(cycle):
+        await message.answer(part, reply_markup=admin_menu())
 
 
 @dp.message(F.text == "📊 Ҳолатим")
