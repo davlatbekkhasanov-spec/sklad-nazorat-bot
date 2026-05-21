@@ -13,8 +13,10 @@ from bot_ui import day_progress_percent, submission_quality_percent
 from time_util import format_submitted_at_display
 
 CARD_W = 960
-CARD_H = 620
+BASE_CARD_H = 560
 MARGIN = 40
+LIST_LINE_H = 24
+MAX_FOLDER_LINES = 14
 
 
 @dataclass
@@ -30,6 +32,7 @@ class ReportCardData:
     submitted_at: str
     day_done: int
     day_total: int
+    counted_folders: list[str]
 
 
 THEMES = {
@@ -82,11 +85,23 @@ def _pick_theme(data: ReportCardData) -> str:
         wrong_location_count=data.wrong_location_count,
         fixed_now=data.fixed_now,
     )
-    if data.day_total > 0 and data.day_done >= data.day_total and q >= 100:
+    day_left = max(0, data.day_total - data.day_done)
+    if data.day_total > 0 and day_left == 0 and q >= 100:
         return "done"
     if q >= 100:
         return "success"
     return "warn"
+
+
+def _card_height(folder_count: int) -> int:
+    lines = min(max(folder_count, 0), MAX_FOLDER_LINES)
+    extra = 56 + lines * LIST_LINE_H if lines else 0
+    return BASE_CARD_H + extra
+
+
+def _truncate(name: str, limit: int = 42) -> str:
+    name = str(name or "").strip()
+    return name if len(name) <= limit else name[: limit - 1] + "…"
 
 
 def _load_fonts():
@@ -107,7 +122,7 @@ def _load_fonts():
         return d, d, d, d
     return (
         ImageFont.truetype(str(bold_path), 32),
-        ImageFont.truetype(str(bold_path), 56),
+        ImageFont.truetype(str(bold_path), 44),
         ImageFont.truetype(str(reg_path), 22),
         ImageFont.truetype(str(reg_path), 16),
     )
@@ -164,11 +179,12 @@ def _add_spotlight(img: Image.Image, color: tuple, cx: int, cy: int, radius: int
 
 def _draw_neon_border(img: Image.Image, color: tuple):
     draw = ImageDraw.Draw(img)
+    h = img.height
     for i, a in enumerate((220, 140, 70)):
         inset = 6 + i * 2
         c = tuple(min(255, int(v * (0.5 + 0.5 * (1 - i / 3)))) for v in color)
         draw.rounded_rectangle(
-            (inset, inset, CARD_W - inset, CARD_H - inset),
+            (inset, inset, CARD_W - inset, h - inset),
             radius=22 - i,
             outline=c,
             width=3 - i,
@@ -179,9 +195,10 @@ def _draw_sparkles(img: Image.Image, color: tuple, seed: int = 42):
     rng = random.Random(seed)
     overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
+    h = img.height
     for _ in range(55):
         x = rng.randint(20, CARD_W - 20)
-        y = rng.randint(20, CARD_H - 120)
+        y = rng.randint(20, max(40, h - 120))
         s = rng.randint(2, 5)
         a = rng.randint(80, 200)
         draw.ellipse((x, y, x + s, y + s), fill=(*color, a))
@@ -231,17 +248,18 @@ def _draw_percent_ring(
     percent: int,
     ring: tuple,
     text: str,
-    font,
-    sub_font,
+    font_big,
+    font_small,
 ):
     dim = tuple(max(0, c // 3) for c in ring)
-    draw.ellipse((cx - r - 4, cy - r - 4, cx + r + 4, cy + r + 4), outline=dim, width=6)
-    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=ring, width=5)
-    tw = draw.textlength(text, font=font)
-    draw.text((cx - tw // 2, cy - 30), text, fill=(255, 255, 255), font=font)
+    draw.ellipse((cx - r - 3, cy - r - 3, cx + r + 3, cy + r + 3), outline=dim, width=4)
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=ring, width=4)
+    label = text if len(text) <= 3 else str(percent)
+    tw = draw.textlength(label, font=font_big)
+    draw.text((cx - tw // 2, cy - 22), label, fill=(255, 255, 255), font=font_big)
     sub = f"{percent}%"
-    sw = draw.textlength(sub, font=sub_font)
-    draw.text((cx - sw // 2, cy + 12), sub, fill=ring, font=sub_font)
+    sw = draw.textlength(sub, font=font_small)
+    draw.text((cx - sw // 2, cy + 10), sub, fill=ring, font=font_small)
 
 
 def _glass_panel(img: Image.Image, box: tuple, border: tuple):
@@ -258,8 +276,11 @@ def _glass_panel(img: Image.Image, box: tuple, border: tuple):
 def render_report_card(data: ReportCardData, *, theme_key: str | None = None) -> Image.Image:
     theme_key = theme_key or _pick_theme(data)
     theme = THEMES[theme_key]
-    img = _vertical_gradient((CARD_W, CARD_H), theme["bg_top"], theme["bg_bottom"])
-    img = _add_spotlight(img, theme["spot"], CARD_W // 2, 140, 380)
+    folders = data.counted_folders or []
+    card_h = _card_height(len(folders))
+
+    img = _vertical_gradient((CARD_W, card_h), theme["bg_top"], theme["bg_bottom"])
+    img = _add_spotlight(img, theme["spot"], CARD_W // 2, 120, 340)
     if theme.get("sparkle"):
         img = _draw_sparkles(img, theme["accent"], seed=7)
 
@@ -269,16 +290,19 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
 
     _draw_neon_border(img, theme["border"])
 
-    hx0, hy0, hx1, hy1 = MARGIN, MARGIN, CARD_W - MARGIN, 108
+    hx0, hy0, hx1, hy1 = MARGIN, MARGIN, CARD_W - MARGIN, MARGIN + 96
+    ring_cx = hx1 - 52
+    ring_cy = (hy0 + hy1) // 2
+    ring_r = 36
+
     shadow = Image.new("RGB", (hx1 - hx0, hy1 - hy0), (0, 0, 0))
-    _paste_rounded(img, shadow, (hx0 + 4, hy0 + 6, hx1 + 4, hy1 + 6), 20)
+    _paste_rounded(img, shadow, (hx0 + 3, hy0 + 5, hx1 + 3, hy1 + 5), 18)
     header_patch = _horizontal_gradient_3(
         hx1 - hx0, hy1 - hy0, theme["header"][0], theme["header"][1], theme["header"][2]
     )
-    _paste_rounded(img, header_patch, (hx0, hy0, hx1, hy1), 20)
+    _paste_rounded(img, header_patch, (hx0, hy0, hx1, hy1), 18)
     draw = ImageDraw.Draw(img)
-    draw.line((hx0 + 16, hy0 + 8, hx1 - 16, hy0 + 8), fill=(255, 255, 255), width=2)
-    draw.text((hx0 + 24, hy0 + 30), theme["title"], fill=white, font=font_title)
+    draw.line((hx0 + 14, hy0 + 7, hx1 - ring_r * 2 - 20, hy0 + 7), fill=(255, 255, 255), width=2)
 
     quality = submission_quality_percent(
         counted_ok=data.counted_ok,
@@ -286,43 +310,40 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         wrong_location_count=data.wrong_location_count,
         fixed_now=data.fixed_now,
     )
-    ring_label = "100" if quality >= 100 else str(quality)
+    title_max_w = ring_cx - ring_r - hx0 - 28
+    title = theme["title"]
+    while title and draw.textlength(title, font=font_title) > title_max_w and len(title) > 12:
+        title = title[:-2]
+    draw.text((hx0 + 20, hy0 + 28), title, fill=white, font=font_title)
     _draw_percent_ring(
-        draw,
-        CARD_W - MARGIN - 58,
-        hy0 + 54,
-        52,
-        quality,
-        theme["accent"],
-        ring_label,
-        font_huge,
-        font_small,
+        draw, ring_cx, ring_cy, ring_r, quality, theme["accent"],
+        str(quality), font_huge, font_small,
     )
 
-    y = 128
-    draw.text((MARGIN, y), data.employee_name, fill=white, font=font_main)
-    y += 36
-    draw.text((MARGIN, y), data.folder_name, fill=theme["accent"], font=font_main)
-    y += 32
-    draw.text((MARGIN, y), data.cycle_title, fill=muted, font=font_small)
+    y = hy1 + 18
+    draw.text((MARGIN, y), _truncate(data.employee_name, 38), fill=white, font=font_main)
+    y += 34
+    draw.text((MARGIN, y), _truncate(data.folder_name, 44), fill=theme["accent"], font=font_main)
+    y += 30
+    draw.text((MARGIN, y), _truncate(data.cycle_title, 50), fill=muted, font=font_small)
 
     day_pct = day_progress_percent(data.day_done, data.day_total)
     day_left = max(0, data.day_total - data.day_done)
 
-    y += 44
-    bar_w = CARD_W - 2 * MARGIN - 120
+    y += 38
+    bar_w = CARD_W - 2 * MARGIN
     bx = MARGIN
     draw.text((bx, y), "BU TEKSHIRUV", fill=muted, font=font_small)
-    draw.text((bx + bar_w - 60, y), f"{quality}%", fill=theme["accent"], font=font_main)
-    y += 26
-    _draw_premium_bar(img, bx, y, bar_w, 24, quality, theme["bar1"], theme["glow"])
-    y += 44
+    draw.text((bx + bar_w - 55, y), f"{quality}%", fill=theme["accent"], font=font_main)
+    y += 24
+    _draw_premium_bar(img, bx, y, bar_w, 22, quality, theme["bar1"], theme["glow"])
+    y += 38
 
     draw.text((bx, y), "KUNLIK PROGRESS", fill=muted, font=font_small)
-    draw.text((bx + bar_w - 100, y), f"{data.day_done}/{data.day_total}", fill=theme["accent"], font=font_main)
-    y += 26
-    _draw_premium_bar(img, bx, y, bar_w, 24, day_pct, theme["bar2"], theme["glow"])
-    y += 44
+    draw.text((bx + bar_w - 72, y), f"{data.day_done}/{data.day_total}", fill=theme["accent"], font=font_main)
+    y += 24
+    _draw_premium_bar(img, bx, y, bar_w, 22, day_pct, theme["bar2"], theme["glow"])
+    y += 38
 
     chip_y = y
     chips = [
@@ -333,13 +354,13 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
     cx = MARGIN
     for label, col in chips:
         tw = int(draw.textlength(label, font=font_small)) + 28
-        draw.rounded_rectangle((cx, chip_y, cx + tw, chip_y + 32), radius=16, fill=(20, 26, 42))
-        draw.rounded_rectangle((cx, chip_y, cx + tw, chip_y + 32), radius=16, outline=col, width=2)
-        draw.text((cx + 14, chip_y + 7), label, fill=col, font=font_small)
-        cx += tw + 12
+        draw.rounded_rectangle((cx, chip_y, cx + tw, chip_y + 30), radius=14, fill=(20, 26, 42))
+        draw.rounded_rectangle((cx, chip_y, cx + tw, chip_y + 30), radius=14, outline=col, width=2)
+        draw.text((cx + 12, chip_y + 6), label, fill=col, font=font_small)
+        cx += tw + 10
 
-    y = chip_y + 48
-    box_h = 118 if not data.location_ok else 92
+    y = chip_y + 44
+    box_h = 108 if not data.location_ok else 82
     img = _glass_panel(img, (MARGIN, y, CARD_W - MARGIN, y + box_h), theme["border"])
     draw = ImageDraw.Draw(img)
 
@@ -348,34 +369,54 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
             return ("HA", (16, 48, 32), (80, 255, 160))
         return ("YO'Q", (52, 18, 18), (255, 90, 90))
 
-    iy = y + 20
-    for label, val, ok in [
-        ("Ostatok", data.counted_ok, data.counted_ok),
-        ("Joy", data.location_ok, data.location_ok),
-    ]:
+    iy = y + 16
+    for label, ok in [("Ostatok", data.counted_ok), ("Joy", data.location_ok)]:
         p_lbl, p_bg, p_fg = pill(ok)
-        draw.text((MARGIN + 20, iy), f"{label}:", fill=white, font=font_small)
-        pw = int(draw.textlength(p_lbl, font=font_small)) + 24
-        px = MARGIN + 130
-        draw.rounded_rectangle((px, iy - 4, px + pw, iy + 24), radius=12, fill=p_bg, outline=p_fg, width=2)
-        draw.text((px + 12, iy), p_lbl, fill=p_fg, font=font_small)
-        iy += 34
+        draw.text((MARGIN + 16, iy), f"{label}:", fill=white, font=font_small)
+        px = MARGIN + 120
+        pw = int(draw.textlength(p_lbl, font=font_small)) + 22
+        draw.rounded_rectangle((px, iy - 3, px + pw, iy + 22), radius=10, fill=p_bg, outline=p_fg, width=2)
+        draw.text((px + 10, iy), p_lbl, fill=p_fg, font=font_small)
+        iy += 30
 
     if not data.location_ok:
-        f_lbl, f_bg, f_fg = pill(1 if data.fixed_now else 0)
+        f_lbl, _, f_fg = pill(1 if data.fixed_now else 0)
         draw.text(
-            (MARGIN + 20, iy),
-            f"Xato: {data.wrong_location_count}  ·  Tuzatildi: {f_lbl}",
-            fill=theme["accent"],
+            (MARGIN + 16, iy),
+            f"Xato joy: {data.wrong_location_count}  ·  Tuzatildi: {f_lbl}",
+            fill=f_fg,
             font=font_small,
         )
 
     if data.comment and data.comment != "-":
-        c = data.comment if len(data.comment) <= 52 else data.comment[:51] + "…"
-        draw.text((MARGIN, y + box_h + 16), f"Izoh: {c}", fill=muted, font=font_small)
+        c = _truncate(data.comment, 48)
+        draw.text((MARGIN + 16, y + box_h - 22), f"Izoh: {c}", fill=muted, font=font_small)
 
-    draw.text((MARGIN, CARD_H - 44), format_submitted_at_display(data.submitted_at), fill=muted, font=font_small)
-    draw.text((CARD_W - MARGIN - 130, CARD_H - 44), "SKLAD NAZORAT", fill=theme["border"], font=font_small)
+    y = y + box_h + 20
+    if folders:
+        list_h = min(len(folders), MAX_FOLDER_LINES) * LIST_LINE_H + 36
+        img = _glass_panel(img, (MARGIN, y, CARD_W - MARGIN, y + list_h), theme["border"])
+        draw = ImageDraw.Draw(img)
+        draw.text((MARGIN + 14, y + 10), "SANALGAN PAPKALAR", fill=theme["accent"], font=font_small)
+        ly = y + 34
+        current = data.folder_name.strip()
+        shown = folders[-MAX_FOLDER_LINES:]
+        hidden = len(folders) - len(shown)
+        for idx, name in enumerate(shown, start=len(folders) - len(shown) + 1):
+            is_new = name.strip() == current and idx == len(folders)
+            prefix = ">> " if is_new else "   "
+            line = f"{idx}. {prefix}{_truncate(name, 40)}"
+            col = theme["accent"] if is_new else muted
+            draw.text((MARGIN + 14, ly), line, fill=col, font=font_small)
+            ly += LIST_LINE_H
+        if hidden > 0:
+            draw.text((MARGIN + 14, ly), f"... yana {hidden} ta (oldingi)", fill=muted, font=font_small)
+
+    footer_y = card_h - 38
+    draw = ImageDraw.Draw(img)
+    time_lbl = format_submitted_at_display(data.submitted_at)
+    draw.text((MARGIN, footer_y), time_lbl, fill=muted, font=font_small)
+    draw.text((CARD_W - MARGIN - 128, footer_y), "SKLAD NAZORAT", fill=theme["border"], font=font_small)
 
     return img
 
@@ -393,6 +434,7 @@ def build_report_card_data(
     submitted_at: str,
     day_done: int,
     day_total: int,
+    counted_folders: list[str] | None = None,
 ) -> ReportCardData:
     return ReportCardData(
         cycle_title=cycle_title,
@@ -406,6 +448,7 @@ def build_report_card_data(
         submitted_at=submitted_at,
         day_done=day_done,
         day_total=day_total,
+        counted_folders=list(counted_folders or []),
     )
 
 

@@ -69,6 +69,20 @@ def use_group_report_card() -> bool:
     return os.getenv("GROUP_REPORT_CARD", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
+def get_submitted_folder_names(employee_id: int, cycle_id: int) -> list[str]:
+    cursor.execute(
+        """
+        SELECT f.name
+        FROM submissions s
+        JOIN folders f ON f.id = s.folder_id
+        WHERE s.employee_id = ? AND s.cycle_id = ?
+        ORDER BY s.submitted_at ASC, s.id ASC
+        """,
+        (employee_id, cycle_id),
+    )
+    return [row["name"] for row in cursor.fetchall()]
+
+
 async def send_submission_to_group(
     bot: Bot,
     *,
@@ -83,6 +97,7 @@ async def send_submission_to_group(
     submitted_at: str,
     day_done: int,
     day_total: int,
+    counted_folders: list[str],
 ) -> str:
     """Guruhga PNG kartochka (yoki matn fallback). Qaytadi: xodim uchun qisqa xabar."""
     if use_group_report_card():
@@ -99,6 +114,7 @@ async def send_submission_to_group(
                 submitted_at=submitted_at,
                 day_done=day_done,
                 day_total=day_total,
+                counted_folders=counted_folders,
             )
             png = render_report_card_png(card)
             photo = BufferedInputFile(png, filename="tekshiruv.png")
@@ -2073,6 +2089,7 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     conn.commit()
 
     stats = employee_work_stats(employee["id"], cycle["id"])
+    counted_folders = get_submitted_folder_names(employee["id"], cycle["id"])
     group_note = await send_submission_to_group(
         bot,
         cycle_title=cycle["title"],
@@ -2086,6 +2103,7 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
         submitted_at=submitted_at,
         day_done=stats["done"],
         day_total=stats["total"],
+        counted_folders=counted_folders,
     )
 
     await state.clear()

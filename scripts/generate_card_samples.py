@@ -28,6 +28,7 @@ SAMPLES = [
             submitted_at=TIME,
             day_done=12,
             day_total=31,
+            counted_folders=["Bloknoty A-12", "Konfety B-1", "Ruchka C-5"],
         ),
     ),
     (
@@ -45,6 +46,7 @@ SAMPLES = [
             submitted_at=TIME,
             day_done=8,
             day_total=25,
+            counted_folders=[f"Guruh {i}" for i in range(1, 9)],
         ),
     ),
     (
@@ -62,6 +64,7 @@ SAMPLES = [
             submitted_at=TIME,
             day_done=31,
             day_total=31,
+            counted_folders=[f"Papka {i}" for i in range(1, 32)],
         ),
     ),
 ]
