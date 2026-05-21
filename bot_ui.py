@@ -71,7 +71,7 @@ def folder_list_keyboard(
     if nav:
         buttons.append(nav)
     if show_mark_all:
-        buttons.append([InlineKeyboardButton(text="✅ Ҳаммасини белгилаш", callback_data="ui:m:all")])
+        buttons.append([InlineKeyboardButton(text="✅ Ҳаммасини тайёр деб белгилаш", callback_data="ui:m:all")])
     buttons.append(
         [
             InlineKeyboardButton(text="🔄 Янгилаш", callback_data="ui:go:dash"),
@@ -84,11 +84,8 @@ def folder_list_keyboard(
 def dashboard_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Кейингисини санаш", callback_data="ui:go:submit")],
-            [
-                InlineKeyboardButton(text="📌 Белгилаш", callback_data="ui:go:mark"),
-                InlineKeyboardButton(text="📋 Рўйхат", callback_data="ui:go:list"),
-            ],
+            [InlineKeyboardButton(text="📝 Санаш", callback_data="ui:go:submit")],
+            [InlineKeyboardButton(text="📌 Тайёр деб белгилаш (ихтиёрий)", callback_data="ui:go:mark")],
             [InlineKeyboardButton(text="🔄 Янгилаш", callback_data="ui:go:dash")],
         ]
     )
@@ -99,8 +96,7 @@ def build_dashboard_text(
     employee_name: str,
     cycle_title: str,
     total: int,
-    unmarked: int,
-    to_submit: int,
+    to_sanash: int,
     done: int,
 ) -> str:
     today = __import__("datetime").datetime.now().strftime("%d.%m.%Y")
@@ -110,9 +106,8 @@ def build_dashboard_text(
         f"<i>{he(today)}</i> · {he(cycle_title)}\n\n"
         f"👤 <b>{he(employee_name)}</b>\n"
         f"<code>{bar}</code>  <b>{done}</b> / {total}\n\n"
-        f"📌 Белгилаш керак: <b>{unmarked}</b>\n"
-        f"📝 Санаш керак: <b>{to_submit}</b>\n"
-        f"✅ Тайёр: <b>{done}</b>"
+        f"📝 Санаш керак: <b>{to_sanash}</b>\n"
+        f"✅ Тайёр (саналган): <b>{done}</b>"
     )
 
 

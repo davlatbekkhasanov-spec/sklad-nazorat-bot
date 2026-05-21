@@ -166,13 +166,45 @@ def count_submitted_folders(employee_id: int, cycle_id: int) -> int:
     return int(cursor.fetchone()["c"] or 0)
 
 
+def count_marked_folders(employee_id: int, cycle_id: int) -> int:
+    cursor.execute(
+        "SELECT COUNT(*) AS c FROM folder_marks WHERE employee_id = ? AND cycle_id = ?",
+        (employee_id, cycle_id),
+    )
+    return int(cursor.fetchone()["c"] or 0)
+
+
+def get_sanash_queue_folders(employee_id: int, cycle_id: int) -> list:
+    """Санаш рўйхати: бириктирилган, ҳали саналмаган ва белгиланмаган."""
+    cursor.execute(
+        """
+        SELECT f.id, f.name
+        FROM assignments a
+        JOIN folders f ON f.id = a.folder_id
+        WHERE a.employee_id = ?
+          AND f.id NOT IN (
+              SELECT folder_id FROM submissions
+              WHERE employee_id = ? AND cycle_id = ?
+          )
+          AND f.id NOT IN (
+              SELECT folder_id FROM folder_marks
+              WHERE employee_id = ? AND cycle_id = ?
+          )
+        ORDER BY f.name
+        """,
+        (employee_id, employee_id, cycle_id, employee_id, cycle_id),
+    )
+    return cursor.fetchall()
+
+
 def employee_work_stats(employee_id: int, cycle_id: int) -> dict:
     assigned = get_employee_assignment_folders(employee_id)
     total = len(assigned)
-    unmarked = len(get_unmarked_assignment_folders(employee_id, cycle_id))
-    to_submit = len(get_remaining_folders_for_employee(employee_id, cycle_id))
-    done = count_submitted_folders(employee_id, cycle_id)
-    return {"total": total, "unmarked": unmarked, "to_submit": to_submit, "done": done}
+    submitted = count_submitted_folders(employee_id, cycle_id)
+    marked = count_marked_folders(employee_id, cycle_id)
+    done = submitted + marked
+    to_sanash = len(get_sanash_queue_folders(employee_id, cycle_id))
+    return {"total": total, "submitted": submitted, "marked": marked, "to_sanash": to_sanash, "done": done}
 
 
 async def send_dashboard(message: Message, employee, cycle, *, edit_message: Optional[Message] = None):
@@ -181,8 +213,7 @@ async def send_dashboard(message: Message, employee, cycle, *, edit_message: Opt
         employee_name=employee["name"],
         cycle_title=cycle["title"],
         total=stats["total"],
-        unmarked=stats["unmarked"],
-        to_submit=stats["to_submit"],
+        to_sanash=stats["to_sanash"],
         done=stats["done"],
     )
     kb = dashboard_keyboard()
@@ -203,24 +234,33 @@ async def show_folder_picker(
 ):
     """mode: p = sanash, m = belgilash"""
     if mode == "p":
-        rows = get_remaining_folders_for_employee(employee["id"], cycle["id"])
+        rows = get_sanash_queue_folders(employee["id"], cycle["id"])
         title = "📝 <b>Санаш</b>"
-        empty_hint = "📌 Аввал папкаларни белгиланг ёки ҳаммаси саналган."
+        assigned_n = len(get_employee_assignment_folders(employee["id"]))
+        if assigned_n == 0:
+            empty_hint = (
+                "⚠️ Сизга Excel бўйича папка бириктирилмаган.\n"
+                "Админга айтинг: 📥 Excel импорт."
+            )
+        elif not rows:
+            empty_hint = "✅ Ҳаммаси тайёр — санаш учун папка қолмади."
+        else:
+            empty_hint = ""
         pick_prefix = "p"
         mark_all = False
     else:
-        rows = get_unmarked_assignment_folders(employee["id"], cycle["id"])
-        title = "📌 <b>Белгилаш</b>"
-        empty_hint = "✅ Барча папкалар белгиланган."
+        rows = get_sanash_queue_folders(employee["id"], cycle["id"])
+        title = "📌 <b>Тайёр деб белгилаш</b> <i>(ихтиёрий)</i>"
+        empty_hint = "✅ Санаш ёки белгилаш учун папка қолмади."
         pick_prefix = "m"
         mark_all = True
 
     if not rows:
         if edit:
             try:
-                await target.edit_text(empty_hint)
+                await target.edit_text(empty_hint, reply_markup=employee_menu())
             except Exception:
-                pass
+                await target.answer(empty_hint, reply_markup=employee_menu())
         else:
             await target.answer(empty_hint, reply_markup=employee_menu())
         return
@@ -256,25 +296,6 @@ def get_marked_folders(employee_id: int, cycle_id: int) -> list:
     return cursor.fetchall()
 
 
-def get_remaining_folders_for_employee(employee_id: int, cycle_id: int) -> list:
-    cursor.execute(
-        """
-        SELECT f.id, f.name
-        FROM folder_marks m
-        JOIN folders f ON f.id = m.folder_id
-        WHERE m.employee_id = ? AND m.cycle_id = ?
-          AND f.id NOT IN (
-              SELECT folder_id
-              FROM submissions
-              WHERE employee_id = ? AND cycle_id = ?
-          )
-        ORDER BY f.name
-        """,
-        (employee_id, cycle_id, employee_id, cycle_id),
-    )
-    return cursor.fetchall()
-
-
 def get_employee_assignment_folders(employee_id: int) -> list:
     cursor.execute(
         """
@@ -289,24 +310,6 @@ def get_employee_assignment_folders(employee_id: int) -> list:
     return cursor.fetchall()
 
 
-def get_unmarked_assignment_folders(employee_id: int, cycle_id: int) -> list:
-    cursor.execute(
-        """
-        SELECT f.id, f.name
-        FROM assignments a
-        JOIN folders f ON f.id = a.folder_id
-        WHERE a.employee_id = ?
-          AND f.id NOT IN (
-              SELECT folder_id FROM folder_marks
-              WHERE cycle_id = ? AND employee_id = ?
-          )
-        ORDER BY f.name
-        """,
-        (employee_id, cycle_id, employee_id),
-    )
-    return cursor.fetchall()
-
-
 def is_folder_assigned_to_employee(employee_id: int, folder_id: int) -> bool:
     cursor.execute(
         "SELECT 1 FROM assignments WHERE employee_id = ? AND folder_id = ?",
@@ -315,8 +318,29 @@ def is_folder_assigned_to_employee(employee_id: int, folder_id: int) -> bool:
     return cursor.fetchone() is not None
 
 
+def get_folder_for_sanash(employee_id: int, cycle_id: int, folder_id: int):
+    cursor.execute(
+        """
+        SELECT f.id, f.name
+        FROM assignments a
+        JOIN folders f ON f.id = a.folder_id
+        WHERE a.employee_id = ? AND f.id = ?
+          AND f.id NOT IN (
+              SELECT folder_id FROM submissions
+              WHERE employee_id = ? AND cycle_id = ?
+          )
+          AND f.id NOT IN (
+              SELECT folder_id FROM folder_marks
+              WHERE employee_id = ? AND cycle_id = ?
+          )
+        """,
+        (employee_id, folder_id, employee_id, cycle_id, employee_id, cycle_id),
+    )
+    return cursor.fetchone()
+
+
 def mark_all_assignment_folders(employee_id: int, cycle_id: int) -> int:
-    rows = get_unmarked_assignment_folders(employee_id, cycle_id)
+    rows = get_sanash_queue_folders(employee_id, cycle_id)
     added = 0
     for row in rows:
         try:
@@ -383,24 +407,19 @@ def build_admin_remaining_folders_report(cycle) -> list[str]:
     header = (
         f"📂 НАЗОРАТ (актив текширув)\n\n"
         f"Цикл: {cycle_title}\n"
-        f"📌 = белгилаш керак | 📝 = ҳисобот керак (гуруҳга ҳали кетмаган)\n\n"
+        f"📝 = санаш керак (ҳисобот гуруҳга ҳали кетмаган)\n\n"
     )
     parts = []
     current = header
 
     for emp in employees:
-        unmarked = get_unmarked_assignment_folders(emp["id"], cycle_id)
-        pending_submit = get_remaining_folders_for_employee(emp["id"], cycle_id)
+        pending = get_sanash_queue_folders(emp["id"], cycle_id)
         block = f"🔹 {emp['name']}\n"
-        if unmarked:
-            block += f"   📌 Белгилаш керак ({len(unmarked)}):\n"
-            for row in unmarked:
+        if pending:
+            block += f"   📝 Санаш керак ({len(pending)}):\n"
+            for row in pending:
                 block += f"      • {row['name']}\n"
-        if pending_submit:
-            block += f"   📝 Ҳисобот керак ({len(pending_submit)}):\n"
-            for row in pending_submit:
-                block += f"      • {row['name']}\n"
-        if not unmarked and not pending_submit:
+        else:
             block += "   ✅ Тайёр\n"
         block += "\n"
 
@@ -852,7 +871,7 @@ async def group_full_report(message: Message):
     report = (
         f"📊 УМУМИЙ СКЛАД ҲИСОБОТИ\n\n"
         f"Цикл: {cycle_title}\n"
-        f"Жами белгиланган папкалар: {total_assignments}\n"
+        f"Жами бириктирилган папкалар: {total_assignments}\n"
         f"Топширилган ҳисоботлар: {total_submitted}\n"
         f"Қолган папкалар: {max(total_assignments - total_submitted, 0)}\n\n"
         f"✅ Остаток тўғри: {counted_ok}\n"
@@ -1105,8 +1124,8 @@ async def help_handler(message: Message):
         "• Гуруҳга фақат якунланган ҳисобот кетади\n"
         "• Гуруҳда /hisobot /hodimlar /papkalar /qolgan командалари ишлайди\n"
         "• 📊 Бугунги иш — прогресс ва қисқа холат\n"
-        "• 📌 Белгилаш — inline тугма (гуруҳга кетмайди)\n"
-        "• 📝 Санаш — inline тугма (гуруҳга кетади)\n"
+        "• 📝 Санаш — папка танлаб, ҳисобот гуруҳга кетади\n"
+        "• 📌 Тайёр деб белгилаш — ихтиёрий (гуруҳга кетмайди, саналган ҳисобланади)\n"
         "• /sanash /holat — тез буйруқлар\n"
         "• Меню янгиланмаса: /start ёки /menu"
     )
@@ -1150,16 +1169,20 @@ async def my_folders_handler(message: Message):
     if not cycle:
         return await message.answer("Актив цикл йўқ.")
 
-    rows = get_marked_folders(employee["id"], cycle["id"])
-    if not rows:
-        return await message.answer(
-            "Ҳали папка белгиламагансиз.\n📌 Папкаларни белгилаш тугмасини босинг.",
-            reply_markup=employee_menu(),
-        )
+    assigned = get_employee_assignment_folders(employee["id"])
+    if not assigned:
+        return await message.answer("Сизга Excel бўйича папка бириктирилмаган.", reply_markup=employee_menu())
 
-    text = f"📋 Белгиланган папкалар ({cycle['title']}):\n\n"
-    for row in rows:
-        text += f"{row['id']}. {row['name']}\n"
+    stats = employee_work_stats(employee["id"], cycle["id"])
+    text = (
+        f"📋 Сизга берилган папкалар\n\n"
+        f"Цикл: {cycle['title']}\n"
+        f"Жами: {stats['total']} | Тайёр: {stats['done']} | Санаш керак: {stats['to_sanash']}\n\n"
+    )
+    for row in assigned[:50]:
+        text += f"• {row['name']}\n"
+    if len(assigned) > 50:
+        text += f"\n… ва яна {len(assigned) - 50} та"
     await message.answer(text, reply_markup=employee_menu())
 
 
@@ -1183,28 +1206,18 @@ async def active_checks_handler(message: Message):
     if not employee:
         return await message.answer("Сиз ходим сифатида топилмадингиз.")
 
-    rows = get_unmarked_assignment_folders(employee["id"], cycle["id"])
+    rows = get_sanash_queue_folders(employee["id"], cycle["id"])
 
     if not rows:
-        pending = get_remaining_folders_for_employee(employee["id"], cycle["id"])
-        if pending:
-            return await message.answer(
-                f"✅ Барча папкалар белгиланган.\n"
-                f"📝 Текширув топшириш: {len(pending)} та ҳисобот қолди.\n\nЦикл: {cycle['title']}",
-                reply_markup=employee_menu(),
-            )
         return await message.answer(
             f"✅ Ҳаммаси бажарилди.\n\nЦикл: {cycle['title']}",
             reply_markup=employee_menu(),
         )
 
-    text = (
-        f"📝 Актив текширувларим\n\nЦикл: {cycle['title']}\n"
-        f"📌 Аввал белгиланг (гуруҳга кетмайди):\n\n"
-    )
+    text = f"📝 Санаш керак ({len(rows)})\n\nЦикл: {cycle['title']}\n\n"
     for row in rows:
-        text += f"{row['id']}. {row['name']}\n"
-    text += "\n📌 Папкаларни белгилаш тугмаси орқали белгиланг."
+        text += f"• {row['name']}\n"
+    text += "\n📝 Санаш тугмаси орқали ҳисобот юборинг."
     await message.answer(text, reply_markup=employee_menu())
 
 
@@ -1269,20 +1282,13 @@ async def status_handler(message: Message):
     if not employee:
         return await message.answer("Сиз ходим сифатида топилмадингиз.")
 
-    cursor.execute("SELECT COUNT(*) AS c FROM folder_marks WHERE employee_id = ? AND cycle_id = ?", (employee["id"], cycle["id"]))
-    total = cursor.fetchone()["c"]
-    cursor.execute(
-        "SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ? AND employee_id = ?",
-        (cycle["id"], employee["id"])
-    )
-    done = cursor.fetchone()["c"]
-
+    stats = employee_work_stats(employee["id"], cycle["id"])
     await message.answer(
         f"📊 Ҳолатингиз\n\n"
         f"Цикл: {cycle['title']}\n"
-        f"Белгиланган папкалар: {total}\n"
-        f"Топширилганлари: {done}\n"
-        f"Қолгани: {max(total - done, 0)}"
+        f"Жами: {stats['total']}\n"
+        f"Тайёр (саналган): {stats['done']}\n"
+        f"Санаш керак: {stats['to_sanash']}"
     )
 
 
@@ -1697,23 +1703,26 @@ async def mark_folders_start(message: Message, state: FSMContext):
             reply_markup=employee_menu(),
         )
 
-    marked = get_marked_folders(employee["id"], cycle["id"])
-    marked_ids = {r["id"] for r in marked}
-    unmarked = [r for r in assigned if r["id"] not in marked_ids]
+    stats = employee_work_stats(employee["id"], cycle["id"])
+    queue = get_sanash_queue_folders(employee["id"], cycle["id"])
+    if not queue:
+        return await message.answer(
+            f"✅ Ҳаммаси тайёр ({stats['done']} / {stats['total']}).",
+            reply_markup=employee_menu(),
+        )
 
     text = (
-        f"📌 Сизнинг папкаларингиз\n\n"
+        f"📌 Тайёр деб белгилаш (ихтиёрий)\n\n"
         f"Цикл: {cycle['title']}\n"
         f"Ходим: {employee['name']}\n"
-        f"Жами сизга: {len(assigned)} та | Белгиланган: {len(marked)} | Қолди: {len(unmarked)}\n\n"
+        f"Жами: {stats['total']} | Тайёр: {stats['done']} | Қолди: {stats['to_sanash']}\n\n"
     )
-    for row in assigned:
-        flag = "✅" if row["id"] in marked_ids else "⬜"
-        text += f"{flag} {row['id']}. {row['name']}\n"
+    for row in queue:
+        text += f"{row['id']}. {row['name']}\n"
 
     text += (
         "\n➕ ID юборинг (масалан: 12 45) ёки ✅ Ҳаммасини белгилаш\n"
-        "✅ Белгилаш тугади — тугмаси\n"
+        "✅ Тугади — тугмаси\n"
     )
 
     await state.set_state(MarkFoldersState.waiting_folder_ids)
@@ -1733,10 +1742,10 @@ async def mark_folders_add(message: Message, state: FSMContext):
         cycle = get_active_cycle()
         if not employee or not cycle:
             return await message.answer("Ходим ёки цикл топилмади.", reply_markup=employee_menu())
-        marked = get_marked_folders(employee["id"], cycle["id"])
+        stats = employee_work_stats(employee["id"], cycle["id"])
         return await message.answer(
-            f"✅ {len(marked)} та папка белгиланган (активдан чиқди).\n"
-            "📝 Текширув топшириш — ҳисобот гуруҳга кетади.",
+            f"✅ Тайёр: {stats['done']} / {stats['total']}\n"
+            "📝 Санаш — ҳисобот гуруҳга кетади.",
             reply_markup=employee_menu(),
         )
 
@@ -1747,10 +1756,10 @@ async def mark_folders_add(message: Message, state: FSMContext):
             await state.clear()
             return await message.answer("Ходим ёки цикл топилмади.", reply_markup=employee_menu())
         added = mark_all_assignment_folders(employee["id"], cycle["id"])
-        marked = get_marked_folders(employee["id"], cycle["id"])
+        stats = employee_work_stats(employee["id"], cycle["id"])
         return await message.answer(
-            f"✅ {added} та янги папка белгиланди.\nЖами: {len(marked)} та.\n"
-            "Актив рўйхатдан чиқди. Энди 📝 Текширув топшириш.",
+            f"✅ {added} та тайёр деб белгиланди.\n"
+            f"Жами тайёр: {stats['done']} / {stats['total']}.",
             reply_markup=mark_folder_keyboard(),
         )
 
@@ -1772,8 +1781,11 @@ async def mark_folders_add(message: Message, state: FSMContext):
         if not folder:
             errors.append(f"ID {folder_id} топилмади")
             continue
-        if not is_folder_assigned_to_employee(employee["id"], folder_id):
-            errors.append(f"{folder['name']} — сизга бириктирилмаган")
+        if not get_folder_for_sanash(employee["id"], cycle["id"], folder_id):
+            if not is_folder_assigned_to_employee(employee["id"], folder_id):
+                errors.append(f"{folder['name']} — сизга бириктирилмаган")
+            else:
+                errors.append(f"{folder['name']} — аллақачон тайёр")
             skipped += 1
             continue
         try:
@@ -1786,9 +1798,9 @@ async def mark_folders_add(message: Message, state: FSMContext):
         except sqlite3.IntegrityError:
             skipped += 1
 
-    reply = f"✅ {added} та папка белгиланди."
+    reply = f"✅ {added} та тайёр деб белгиланди."
     if skipped:
-        reply += f"\n⚠️ {skipped} та ўтказилди (аввал банд/сизда бор)."
+        reply += f"\n⚠️ {skipped} та ўтказилди (аввал тайёр/сизда йўқ)."
     if errors:
         reply += "\n" + "\n".join(errors[:5])
     reply += "\n\nЯна ID юборинг ёки ✅ Белгилаш тугади."
@@ -1883,16 +1895,12 @@ async def submit_get_folder(message: Message, state: FSMContext):
 
     folder_id = int(message.text)
 
-    cursor.execute("""
-        SELECT f.id, f.name
-        FROM folder_marks m
-        JOIN folders f ON f.id = m.folder_id
-        WHERE m.employee_id = ? AND m.cycle_id = ? AND f.id = ?
-    """, (employee["id"], cycle["id"], folder_id))
-    folder = cursor.fetchone()
+    folder = get_folder_for_sanash(employee["id"], cycle["id"], folder_id)
 
     if not folder:
-        return await message.answer("Бу папка сиз белгиламагансиз. Аввал 📌 Папкаларни белгилаш.")
+        return await message.answer(
+            "Бу папка санаш учун мавжуд эмас (тайёр ёки сизга бириктирилмаган)."
+        )
 
     cursor.execute("""
         SELECT id FROM submissions
@@ -2109,8 +2117,7 @@ async def cb_go_dashboard(callback: CallbackQuery, state: FSMContext):
         employee_name=employee["name"],
         cycle_title=cycle["title"],
         total=stats["total"],
-        unmarked=stats["unmarked"],
-        to_submit=stats["to_submit"],
+        to_sanash=stats["to_sanash"],
         done=stats["done"],
     )
     await callback.message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=dashboard_keyboard())
@@ -2141,17 +2148,12 @@ async def cb_go_mark(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "ui:go:list")
 async def cb_go_list(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    await state.clear()
     employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
     cycle = get_active_cycle()
     if not employee or not cycle:
         return
-    rows = get_marked_folders(employee["id"], cycle["id"])
-    text = f"<b>📋 Белгиланган</b> ({len(rows)}):\n\n"
-    for row in rows[:40]:
-        text += f"• {he(row['name'])}\n"
-    if len(rows) > 40:
-        text += f"\n<i>… ва яна {len(rows) - 40} та</i>"
-    await callback.message.answer(text, parse_mode=ParseMode.HTML, reply_markup=employee_menu())
+    await send_dashboard(callback.message, employee, cycle)
 
 
 @dp.callback_query(F.data.regexp(r"^ui:[pm]:p:\d+$"))
@@ -2175,7 +2177,7 @@ async def cb_mark_all(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Хато", show_alert=True)
         return
     added = mark_all_assignment_folders(employee["id"], cycle["id"])
-    await callback.answer(f"✅ {added} та белгиланди", show_alert=True)
+    await callback.answer(f"✅ {added} та тайёр деб белгиланди", show_alert=True)
     await show_folder_picker(callback.message, employee, cycle, mode="m", page=0, edit=True)
 
 
@@ -2187,8 +2189,8 @@ async def cb_mark_one(callback: CallbackQuery, state: FSMContext):
     if not employee or not cycle:
         await callback.answer("Хато", show_alert=True)
         return
-    if not is_folder_assigned_to_employee(employee["id"], folder_id):
-        await callback.answer("Сизга бириктирилмаган", show_alert=True)
+    if not get_folder_for_sanash(employee["id"], cycle["id"], folder_id):
+        await callback.answer("Санаш учун мавжуд эмас", show_alert=True)
         return
     try:
         cursor.execute(
@@ -2196,9 +2198,9 @@ async def cb_mark_one(callback: CallbackQuery, state: FSMContext):
             (cycle["id"], employee["id"], folder_id, now_str()),
         )
         conn.commit()
-        await callback.answer("✅ Белгиланди")
+        await callback.answer("✅ Тайёр")
     except sqlite3.IntegrityError:
-        await callback.answer("Аввал белгиланган")
+        await callback.answer("Аввал тайёр")
     await show_folder_picker(callback.message, employee, cycle, mode="m", page=0, edit=True)
 
 
@@ -2210,17 +2212,9 @@ async def cb_pick_folder_submit(callback: CallbackQuery, state: FSMContext):
     if not employee or not cycle:
         await callback.answer("Хато", show_alert=True)
         return
-    cursor.execute(
-        """
-        SELECT f.id, f.name FROM folder_marks m
-        JOIN folders f ON f.id = m.folder_id
-        WHERE m.employee_id = ? AND m.cycle_id = ? AND f.id = ?
-        """,
-        (employee["id"], cycle["id"], folder_id),
-    )
-    folder = cursor.fetchone()
+    folder = get_folder_for_sanash(employee["id"], cycle["id"], folder_id)
     if not folder:
-        await callback.answer("Аввал белгиланг", show_alert=True)
+        await callback.answer("Санаш учун мавжуд эмас", show_alert=True)
         return
     cursor.execute(
         "SELECT id FROM submissions WHERE cycle_id = ? AND employee_id = ? AND folder_id = ?",
