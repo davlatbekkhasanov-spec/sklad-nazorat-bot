@@ -21,13 +21,13 @@
 
 **Eslatma:** agar **aktiv tsikl** davom etayotgan bo‘lsa va Пулат/Юнус allaqachon ba’zi papkalar bo‘yicha hisobot topshirgan bo‘lsa, shu papkalar boshqa xodimga o‘tgach **yana topshirish** mumkin (hisobot xodim+tsikl+papka bo‘yicha). Xavfsiz variant: tsiklni yopib, keyin deploy qilish.
 
-## Yangi ish tartibi (ходим ўзи белгилайди)
+## Ish tartibi
 
-1. **📌 Папкаларни белгилаш** — ходим керакли папка ID ларини танлайди (Excel/deploy буни ўчирмайди).
-2. **📝 Текширув топшириш** — фақат белгилangan папкалар; гуруҳга **автомат юборилмайди**.
-3. Admin **📤 Гуруҳга юбориш** — тайёр ҳисоботларни гуруҳга биргаликда юборади.
+1. **📌 Папкаларни белгилаш** — ходим ўз папкасини белгилайди; **гуруҳга кетмайди**; **📝 Актив текширувларим** рўйхатидан чиқади.
+2. **📝 Текширув топшириш** — белгилangan папка бўйича ҳисобот; **гуруҳга дарҳол кетади**.
+3. Admin **📂 Қолган папкалар** ёки **📝 Актив текширувларим** — кимда белгилаш/ҳисобот қолганини кўради.
 
-`folder_marks` jadvali tsikl bo‘yicha saqlanadi. Ishga tushganda faqat Excel **qo‘shadi** (o‘chirmaydi).
+`folder_marks` deployda saqlanadi (volume билан).
 
 ## Qo‘lda sinxron
 

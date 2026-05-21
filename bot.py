@@ -100,7 +100,7 @@ def admin_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📥 Excel импорт")],
             [KeyboardButton(text="🚀 Янги цикл очиш"), KeyboardButton(text="🛑 Циклни ёпиш")],
             [KeyboardButton(text="📂 Қолган папкалар"), KeyboardButton(text="📈 Актив цикл ҳолати")],
-            [KeyboardButton(text="📤 Гуруҳга юбориш"), KeyboardButton(text="🗑 Ҳисоботни ўчириш")],
+            [KeyboardButton(text="🗑 Ҳисоботни ўчириш")],
             [KeyboardButton(text="📋 Менга берилган папкалар"), KeyboardButton(text="📝 Актив текширувларим")],
             [KeyboardButton(text="📝 Текширув топшириш"), KeyboardButton(text="📊 Ҳолатим")],
             [KeyboardButton(text="🔓 Чиқиш"), KeyboardButton(text="❓ Ёрдам")],
@@ -278,27 +278,36 @@ def build_admin_remaining_folders_report(cycle) -> list[str]:
         """
         SELECT DISTINCT e.id, e.name
         FROM employees e
-        JOIN folder_marks m ON m.employee_id = e.id AND m.cycle_id = ?
+        JOIN assignments a ON a.employee_id = e.id
         ORDER BY e.name
-        """,
-        (cycle_id,),
+        """
     )
     employees = cursor.fetchall()
     if not employees:
-        return ["Ҳали ҳеч ким папка белгиламаган."]
+        return ["Ҳеч кимга папка бириктирилмаган (Excel)."]
 
-    header = f"📂 ҚОЛГАН ПАПКАЛАР\n\nЦикл: {cycle_title}\n\n"
+    header = (
+        f"📂 НАЗОРАТ (актив текширув)\n\n"
+        f"Цикл: {cycle_title}\n"
+        f"📌 = белгилаш керак | 📝 = ҳисобот керак (гуруҳга ҳали кетмаган)\n\n"
+    )
     parts = []
     current = header
 
     for emp in employees:
-        rows = get_remaining_folders_for_employee(emp["id"], cycle_id)
-        block = f"🔹 {emp['name']} — {len(rows)} та қолди\n"
-        if rows:
-            for row in rows:
-                block += f"   • {row['name']}\n"
-        else:
-            block += "   ✅ Ҳаммаси топширилган\n"
+        unmarked = get_unmarked_assignment_folders(emp["id"], cycle_id)
+        pending_submit = get_remaining_folders_for_employee(emp["id"], cycle_id)
+        block = f"🔹 {emp['name']}\n"
+        if unmarked:
+            block += f"   📌 Белгилаш керак ({len(unmarked)}):\n"
+            for row in unmarked:
+                block += f"      • {row['name']}\n"
+        if pending_submit:
+            block += f"   📝 Ҳисобот керак ({len(pending_submit)}):\n"
+            for row in pending_submit:
+                block += f"      • {row['name']}\n"
+        if not unmarked and not pending_submit:
+            block += "   ✅ Тайёр\n"
         block += "\n"
 
         if len(current) + len(block) > 3500:
@@ -999,9 +1008,9 @@ async def help_handler(message: Message):
         "• Ходимлар личкада ишлайди\n"
         "• Гуруҳга фақат якунланган ҳисобот кетади\n"
         "• Гуруҳда /hisobot /hodimlar /papkalar /qolgan командалари ишлайди\n"
-        "• Аввал 📌 Папкаларни белгилаш, кейин 📝 Текширув топшириш\n"
-        "• Гуруҳга ходим эмас, админ 📤 Гуруҳга юбориш билан юборади\n"
-        "• Админ: 📂 Қолган папкалар\n"
+        "• 📌 Белгилаш — гуруҳга кетмайди, актив рўйхатдан чиқади\n"
+        "• 📝 Текширув топшириш — ҳисобот гуруҳга кетади\n"
+        "• Админ: 📂 Қолган папкалар ёки 📝 Актив текширувларим\n"
         "• Меню янгиланмаса: /start ёки /menu"
     )
     markup = admin_menu() if is_admin(message.from_user.id) else None
@@ -1061,35 +1070,42 @@ async def active_checks_handler(message: Message):
     if not require_login_or_admin(message):
         return await message.answer("Аввал киринг.", reply_markup=login_keyboard())
 
-    if is_admin(message.from_user.id):
-        return await message.answer("Админ учун алоҳида цикл ҳолати бор.")
-
-    employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
     cycle = get_active_cycle()
-
-    if not employee:
-        return await message.answer("Сиз ходим сифатида топилмадингиз.")
     if not cycle:
         return await message.answer("Ҳозирча актив цикл йўқ.")
 
-    rows = get_remaining_folders_for_employee(employee["id"], cycle["id"])
+    if is_admin(message.from_user.id):
+        for part in build_admin_remaining_folders_report(cycle):
+            await message.answer(part, reply_markup=admin_menu())
+        return
+
+    employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+    if not employee:
+        return await message.answer("Сиз ходим сифатида топилмадингиз.")
+
+    rows = get_unmarked_assignment_folders(employee["id"], cycle["id"])
 
     if not rows:
-        marked = get_marked_folders(employee["id"], cycle["id"])
-        if not marked:
+        pending = get_remaining_folders_for_employee(employee["id"], cycle["id"])
+        if pending:
             return await message.answer(
-                f"📌 Аввал папкаларни белгиланг.\n\nЦикл: {cycle['title']}",
+                f"✅ Барча папкалар белгиланган.\n"
+                f"📝 Текширув топшириш: {len(pending)} та ҳисобот қолди.\n\nЦикл: {cycle['title']}",
                 reply_markup=employee_menu(),
             )
         return await message.answer(
-            f"✅ Белгиланган барча папка бўйича ҳисобот топширилган.\n\nЦикл: {cycle['title']}",
+            f"✅ Ҳаммаси бажарилди.\n\nЦикл: {cycle['title']}",
             reply_markup=employee_menu(),
         )
 
-    text = f"📝 Актив цикл: {cycle['title']}\n\nТекшириш керак (белгиланган):\n"
+    text = (
+        f"📝 Актив текширувларим\n\nЦикл: {cycle['title']}\n"
+        f"📌 Аввал белгиланг (гуруҳга кетмайди):\n\n"
+    )
     for row in rows:
         text += f"{row['id']}. {row['name']}\n"
-    await message.answer(text)
+    text += "\n📌 Папкаларни белгилаш тугмаси орқали белгиланг."
+    await message.answer(text, reply_markup=employee_menu())
 
 
 @dp.message(F.text == "📂 Қолган папкалар")
@@ -1107,59 +1123,6 @@ async def admin_remaining_folders_handler(message: Message):
 
     for part in build_admin_remaining_folders_report(cycle):
         await message.answer(part, reply_markup=admin_menu())
-
-
-@dp.message(F.text == "📤 Гуруҳга юбориш")
-async def admin_post_group_handler(message: Message, bot: Bot):
-    if not is_private(message):
-        return
-    if not is_admin(message.from_user.id):
-        return await message.answer("⛔ Сиз админ эмассиз.")
-
-    cycle = get_active_cycle() or get_cycle_for_reports()
-    if not cycle:
-        return await message.answer("Актив ёки охирги цикл топилмади.")
-
-    cursor.execute(
-        """
-        SELECT s.*, e.name AS employee_name, f.name AS folder_name
-        FROM submissions s
-        JOIN employees e ON e.id = s.employee_id
-        JOIN folders f ON f.id = s.folder_id
-        WHERE s.cycle_id = ? AND s.posted_to_group = 0
-        ORDER BY s.id
-        """,
-        (cycle["id"],),
-    )
-    rows = cursor.fetchall()
-    if not rows:
-        remaining_parts = build_admin_remaining_folders_report(cycle)
-        await message.answer(
-            "Гуруҳга юбориш учун тайёр ҳисобот йўқ.\n\n" + (remaining_parts[0][:1500] if remaining_parts else ""),
-            reply_markup=admin_menu(),
-        )
-        return
-
-    sent = 0
-    errors = 0
-    for row in rows:
-        report_text = format_submission_group_text(
-            cycle["title"], row["employee_name"], row["folder_name"], row
-        )
-        try:
-            await bot.send_message(GROUP_ID, report_text)
-            cursor.execute("UPDATE submissions SET posted_to_group = 1 WHERE id = ?", (row["id"],))
-            conn.commit()
-            sent += 1
-        except Exception:
-            errors += 1
-
-    await message.answer(
-        f"✅ Гуруҳга юборилди: {sent} та ҳисобот.\n"
-        + (f"⚠️ Хато: {errors} та\n" if errors else "")
-        + "Қолган белгиланмаган/топширилмаган папкалар: 📂 Қолган папкалар",
-        reply_markup=admin_menu(),
-    )
 
 
 @dp.message(Command("qolgan"))
@@ -1193,18 +1156,13 @@ async def status_handler(message: Message):
         total = cursor.fetchone()["c"]
         cursor.execute("SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ?", (cycle["id"],))
         done = cursor.fetchone()["c"]
-        cursor.execute(
-            "SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ? AND posted_to_group = 0",
-            (cycle["id"],),
-        )
-        pending_group = cursor.fetchone()["c"]
         return await message.answer(
             f"📈 Админ ҳолати\n\n"
             f"Цикл: {cycle['title']}\n"
             f"Белгиланган папкалар: {total}\n"
             f"Топширилган ҳисоботлар: {done}\n"
-            f"Гуруҳга кутилмоқда: {pending_group}\n"
-            f"Қолгани: {max(total - done, 0)}"
+            f"Қолгани: {max(total - done, 0)}\n\n"
+            f"Батафсил: 📂 Қолган папкалар"
         )
 
     employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
@@ -1602,18 +1560,11 @@ async def active_cycle_status_handler(message: Message):
     total_marks = cursor.fetchone()["c"]
     cursor.execute("SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ?", (cycle["id"],))
     submitted = cursor.fetchone()["c"]
-    cursor.execute(
-        "SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ? AND posted_to_group = 0",
-        (cycle["id"],),
-    )
-    pending_group = cursor.fetchone()["c"]
-
     text = (
         f"📈 Актив цикл ҳолати\n\n"
         f"Цикл: {cycle['title']}\n"
         f"Белгиланган папкалар: {total_marks}\n"
         f"Топширилган ҳисоботлар: {submitted}\n"
-        f"Гуруҳга кутилмоқда: {pending_group}\n"
         f"Қолгани: {max(total_marks - submitted, 0)}"
     )
     await message.answer(text)
@@ -1684,8 +1635,8 @@ async def mark_folders_add(message: Message, state: FSMContext):
             return await message.answer("Ходим ёки цикл топилмади.", reply_markup=employee_menu())
         marked = get_marked_folders(employee["id"], cycle["id"])
         return await message.answer(
-            f"✅ Сақланди: {len(marked)} та папка белгиланган.\n"
-            "Энди 📝 Текширув топшириш орқали ҳисобот тўлдиринг.",
+            f"✅ {len(marked)} та папка белгиланган (активдан чиқди).\n"
+            "📝 Текширув топшириш — ҳисобот гуруҳга кетади.",
             reply_markup=employee_menu(),
         )
 
@@ -1699,7 +1650,7 @@ async def mark_folders_add(message: Message, state: FSMContext):
         marked = get_marked_folders(employee["id"], cycle["id"])
         return await message.answer(
             f"✅ {added} та янги папка белгиланди.\nЖами: {len(marked)} та.\n"
-            "📝 Текширув топшириш ёки ✅ Белгилаш тугади.",
+            "Актив рўйхатдан чиқди. Энди 📝 Текширув топшириш.",
             reply_markup=mark_folder_keyboard(),
         )
 
@@ -1897,29 +1848,51 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
 
     submitted_at = now_str()
+    counted_ok = data["counted_ok"]
+    location_ok = data["location_ok"]
+    wrong_location_count = data.get("wrong_location_count", 0)
+    fixed_now = data.get("fixed_now")
+    folder_name = data["folder_name"]
+
     cursor.execute("""
         INSERT INTO submissions (
             cycle_id, employee_id, folder_id,
             counted_ok, location_ok, wrong_location_count,
             fixed_now, comment, submitted_at, posted_to_group
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     """, (
         cycle["id"],
         employee["id"],
         data["folder_id"],
-        data["counted_ok"],
-        data["location_ok"],
-        data.get("wrong_location_count", 0),
+        counted_ok,
+        location_ok,
+        wrong_location_count,
         data.get("fixed_now"),
         comment,
         submitted_at,
     ))
     conn.commit()
 
+    report_text = format_submission_group_text(
+        cycle["title"], employee["name"], folder_name,
+        {
+            "counted_ok": counted_ok,
+            "location_ok": location_ok,
+            "wrong_location_count": wrong_location_count,
+            "fixed_now": fixed_now,
+            "comment": comment,
+            "submitted_at": submitted_at,
+        },
+    )
+    try:
+        await bot.send_message(GROUP_ID, report_text)
+        group_note = "Гуруҳга юборилди."
+    except Exception as e:
+        group_note = f"⚠️ Гуруҳга юборишда муаммо: {e}"
+
     await state.clear()
     await message.answer(
-        "✅ Ҳисобот сақланди.\n"
-        "Гуруҳга админ 📤 Гуруҳга юбориш орқали юборади.",
+        f"✅ Ҳисобот қабул қилинди.\n{group_note}",
         reply_markup=employee_menu(),
     )
 
