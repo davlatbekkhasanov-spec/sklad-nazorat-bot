@@ -18,8 +18,8 @@ SAMPLES = [
         "success",
         ReportCardData(
             cycle_title="21.05.2026 — Kunlik sanash",
-            employee_name="Alisher Karimov",
-            folder_name="Bloknoty A-12",
+            employee_name="Алишер Каримов",
+            folder_name="Блокноты A-12",
             counted_ok=1,
             location_ok=1,
             wrong_location_count=0,
@@ -28,7 +28,7 @@ SAMPLES = [
             submitted_at=TIME,
             day_done=12,
             day_total=31,
-            counted_folders=["Bloknoty A-12", "Konfety B-1", "Ruchka C-5"],
+            counted_folders=["Блокноты A-12", "Конфеты B-1", "Ручка C-5"],
         ),
     ),
     (
@@ -36,8 +36,8 @@ SAMPLES = [
         "warn",
         ReportCardData(
             cycle_title="21.05.2026 — Kunlik sanash",
-            employee_name="Alisher Karimov",
-            folder_name="Konfety B-3",
+            employee_name="Алишер Каримов",
+            folder_name="Конфеты B-3",
             counted_ok=1,
             location_ok=0,
             wrong_location_count=3,
@@ -54,8 +54,8 @@ SAMPLES = [
         "done",
         ReportCardData(
             cycle_title="21.05.2026 — Kunlik sanash",
-            employee_name="Alisher Karimov",
-            folder_name="Bloknoty A-12",
+            employee_name="Алишер Каримов",
+            folder_name="Блокноты A-12",
             counted_ok=1,
             location_ok=1,
             wrong_location_count=0,

@@ -10,7 +10,8 @@
 
 1. `DB_PATH=sklad_bot.db` ni `.env` da qoldiring.
 2. **Vaqt:** `TZ=Asia/Tashkent` (Railway UTC bo‘lsa soat 5 soat orqada chiqmasin).
-3. **Guruh hisoboti:** PNG kartochka (default). O‘chirish: `GROUP_REPORT_CARD=0` — oddiy matn qaytadi.
+3. **Guruh hisoboti:** PNG kartochka (1200px, Noto shrift). O‘chirish: `GROUP_REPORT_CARD=0`.
+4. **Shrift:** `assets/fonts/NotoSans-*.ttf` repoda — Railwayda ham kirill to‘g‘ri chiqadi.
 2. Serverda **doimiy disk (volume)** bog‘lang — Railway / VPS da `sklad_bot.db` fayli saqlanadigan papka.
 3. Yangi kod + `groups.xlsx` deploy qilinganda bot **ishga tushganda** Excel bilan `assignments` ni **sinxronlaydi** (`sync_assignments_from_excel`):
    - Excelda yo‘q eski biriktirishlar **o‘chiriladi**
