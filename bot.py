@@ -2009,6 +2009,7 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     ))
     conn.commit()
 
+    stats = employee_work_stats(employee["id"], cycle["id"])
     report_text = format_submission_group_html(
         cycle["title"],
         employee["name"],
@@ -2019,6 +2020,8 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
         fixed_now=fixed_now,
         comment=comment,
         submitted_at=submitted_at,
+        day_done=stats["done"],
+        day_total=stats["total"],
     )
     try:
         await bot.send_message(GROUP_ID, report_text, parse_mode=ParseMode.HTML)

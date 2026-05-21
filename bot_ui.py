@@ -21,6 +21,49 @@ def progress_bar(done: int, total: int, width: int = 12) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def percent_bar(percent: int, width: int = 14) -> str:
+    pct = max(0, min(100, int(percent)))
+    filled = min(width, int(round(width * pct / 100)))
+    return "█" * filled + "░" * (width - filled)
+
+
+def day_progress_percent(done: int, total: int) -> int:
+    if total <= 0:
+        return 0
+    return min(100, int(round(100 * done / total)))
+
+
+def submission_quality_percent(
+    *,
+    counted_ok: int,
+    location_ok: int,
+    wrong_location_count: int,
+    fixed_now,
+) -> int:
+    """Бу текширув натижаси: 0–100% (остаток + жой + тўғирлаш)."""
+    if counted_ok and location_ok:
+        return 100
+    score = 0
+    if counted_ok:
+        score += 50
+    if location_ok:
+        score += 50
+    elif fixed_now:
+        score += 25
+    if not location_ok and wrong_location_count:
+        score = max(0, score - min(35, int(wrong_location_count) * 5))
+    return min(100, score)
+
+
+def format_submitted_at_display(submitted_at: str) -> str:
+    raw = str(submitted_at or "").strip()
+    try:
+        dt = __import__("datetime").datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
+        return dt.strftime("%d.%m.%Y · %H:%M")
+    except ValueError:
+        return raw
+
+
 def truncate_label(name: str, limit: int = 36) -> str:
     name = str(name or "").strip()
     return name if len(name) <= limit else name[: limit - 1] + "…"
@@ -122,19 +165,52 @@ def format_submission_group_html(
     fixed_now,
     comment: str,
     submitted_at: str,
+    day_done: int,
+    day_total: int,
 ) -> str:
+    quality = submission_quality_percent(
+        counted_ok=counted_ok,
+        location_ok=location_ok,
+        wrong_location_count=wrong_location_count,
+        fixed_now=fixed_now,
+    )
+    day_pct = day_progress_percent(day_done, day_total)
+    q_bar = percent_bar(quality)
+    d_bar = percent_bar(day_pct)
+
+    if quality >= 100 and day_total > 0 and day_done >= day_total:
+        header = "🎉 <b>ТЕКШИРУВ ТАЙЁР — 100%</b>"
+    elif quality >= 100:
+        header = "✅ <b>ТЕКШИРУВ — АЪЛО</b>"
+    elif quality >= 60:
+        header = "⚠️ <b>ТЕКШИРУВ — ДИҚҚАТ</b>"
+    else:
+        header = "❌ <b>ТЕКШИРУВ — МУАММО</b>"
+
     lines = [
-        "<b>📦 Склад текшируви</b>",
+        header,
         "",
-        f"👤 {he(employee_name)}",
-        f"📁 <b>{he(folder_name)}</b>",
-        f"🗓 {he(cycle_title)}",
+        f"👤 <b>{he(employee_name)}</b>",
+        f"📁 <u>{he(folder_name)}</u>",
+        f"🗓 <i>{he(cycle_title)}</i>",
         "",
-        f"Остаток: {'✅' if counted_ok else '❌'}",
-        f"Жой: {'✅' if location_ok else '❌'}",
+        f"<b>📊 Бу текширув</b>",
+        f"<code>{q_bar}</code>  <b>{quality}%</b>",
+        "",
+        f"<b>📈 Кунлик юкланиш</b>",
+        f"<code>{d_bar}</code>  <b>{day_pct}%</b>  ({day_done}/{day_total})",
+        "",
+        "┌ <b>Натижа</b> ─────────",
+        f"│ Остаток  {'✅' if counted_ok else '❌'}",
+        f"│ Жой      {'✅' if location_ok else '❌'}",
     ]
     if not location_ok:
-        lines.append(f"Хато жой: <b>{wrong_location_count}</b>")
-        lines.append(f"Тўғирланди: {'✅' if fixed_now else '❌'}")
-    lines.extend(["", f"💬 {he(comment)}", f"🕐 {he(submitted_at)}"])
+        lines.append(f"│ Хато жой <b>{wrong_location_count}</b> та")
+        lines.append(f"│ Тўғирланди {'✅' if fixed_now else '❌'}")
+    lines.append("└────────────────")
+
+    if comment and comment != "-":
+        lines.extend(["", f"<blockquote>💬 {he(comment)}</blockquote>"])
+
+    lines.extend(["", f"🕐 {he(format_submitted_at_display(submitted_at))}"])
     return "\n".join(lines)
