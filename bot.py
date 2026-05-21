@@ -100,7 +100,7 @@ def admin_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📥 Excel импорт")],
             [KeyboardButton(text="🚀 Янги цикл очиш"), KeyboardButton(text="🛑 Циклни ёпиш")],
             [KeyboardButton(text="📂 Қолган папкалар"), KeyboardButton(text="📈 Актив цикл ҳолати")],
-            [KeyboardButton(text="🗑 Ҳисоботни ўчириш")],
+            [KeyboardButton(text="📤 Гуруҳга юбориш"), KeyboardButton(text="🗑 Ҳисоботни ўчириш")],
             [KeyboardButton(text="📋 Менга берилган папкалар"), KeyboardButton(text="📝 Актив текширувларим")],
             [KeyboardButton(text="📝 Текширув топшириш"), KeyboardButton(text="📊 Ҳолатим")],
             [KeyboardButton(text="🔓 Чиқиш"), KeyboardButton(text="❓ Ёрдам")],
@@ -112,12 +112,22 @@ def admin_menu() -> ReplyKeyboardMarkup:
 def employee_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📋 Менга берилган папкалар")],
-            [KeyboardButton(text="📝 Актив текширувларим"), KeyboardButton(text="📝 Текширув топшириш")],
-            [KeyboardButton(text="📊 Ҳолатим"), KeyboardButton(text="🔓 Чиқиш")],
-            [KeyboardButton(text="❓ Ёрдам")],
+            [KeyboardButton(text="📌 Папкаларни белгилаш")],
+            [KeyboardButton(text="📝 Текширув топшириш"), KeyboardButton(text="📝 Актив текширувларим")],
+            [KeyboardButton(text="📋 Белгиланган папкалар"), KeyboardButton(text="📊 Ҳолатим")],
+            [KeyboardButton(text="🔓 Чиқиш"), KeyboardButton(text="❓ Ёрдам")],
         ],
         resize_keyboard=True
+    )
+
+
+def mark_folder_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="✅ Белгилаш тугади")],
+            [KeyboardButton(text="❌ Бекор қилиш")],
+        ],
+        resize_keyboard=True,
     )
 
 
@@ -125,13 +135,27 @@ def current_menu(user_id: int):
     return admin_menu() if is_admin(user_id) else employee_menu()
 
 
+def get_marked_folders(employee_id: int, cycle_id: int) -> list:
+    cursor.execute(
+        """
+        SELECT f.id, f.name
+        FROM folder_marks m
+        JOIN folders f ON f.id = m.folder_id
+        WHERE m.employee_id = ? AND m.cycle_id = ?
+        ORDER BY f.name
+        """,
+        (employee_id, cycle_id),
+    )
+    return cursor.fetchall()
+
+
 def get_remaining_folders_for_employee(employee_id: int, cycle_id: int) -> list:
     cursor.execute(
         """
         SELECT f.id, f.name
-        FROM assignments a
-        JOIN folders f ON f.id = a.folder_id
-        WHERE a.employee_id = ?
+        FROM folder_marks m
+        JOIN folders f ON f.id = m.folder_id
+        WHERE m.employee_id = ? AND m.cycle_id = ?
           AND f.id NOT IN (
               SELECT folder_id
               FROM submissions
@@ -139,9 +163,57 @@ def get_remaining_folders_for_employee(employee_id: int, cycle_id: int) -> list:
           )
         ORDER BY f.name
         """,
-        (employee_id, employee_id, cycle_id),
+        (employee_id, cycle_id, employee_id, cycle_id),
     )
     return cursor.fetchall()
+
+
+def get_available_folders_for_mark(cycle_id: int) -> list:
+    cursor.execute(
+        """
+        SELECT f.id, f.name
+        FROM folders f
+        WHERE f.id NOT IN (
+            SELECT folder_id FROM folder_marks WHERE cycle_id = ?
+        )
+        ORDER BY f.name
+        """,
+        (cycle_id,),
+    )
+    return cursor.fetchall()
+
+
+def parse_folder_id_list(text: str) -> list[int]:
+    ids = []
+    for part in re.split(r"[,;\s]+", clean_text(text)):
+        if part.isdigit():
+            ids.append(int(part))
+    return ids
+
+
+def format_submission_group_text(cycle_title: str, employee_name: str, folder_name: str, row) -> str:
+    counted_ok = row["counted_ok"]
+    location_ok = row["location_ok"]
+    wrong_location_count = row["wrong_location_count"] or 0
+    fixed_now = row["fixed_now"]
+    comment = row["comment"] or "-"
+    submitted_at = row["submitted_at"]
+
+    report_text = (
+        f"📦 Якунланган склад ҳисоботи\n\n"
+        f"Цикл: {cycle_title}\n"
+        f"Ходим: {employee_name}\n"
+        f"Папка: {folder_name}\n"
+        f"Остаток тўғри: {'Ҳа' if counted_ok else 'Йўқ'}\n"
+        f"Место хранения тўғри: {'Ҳа' if location_ok else 'Йўқ'}\n"
+    )
+    if location_ok == 0:
+        report_text += (
+            f"Хато место сони: {wrong_location_count}\n"
+            f"Тўғирланди: {'Ҳа' if fixed_now else 'Йўқ'}\n"
+        )
+    report_text += f"Изоҳ: {comment}\nВақт: {submitted_at}"
+    return report_text
 
 
 def build_admin_remaining_folders_report(cycle) -> list[str]:
@@ -152,13 +224,14 @@ def build_admin_remaining_folders_report(cycle) -> list[str]:
         """
         SELECT DISTINCT e.id, e.name
         FROM employees e
-        JOIN assignments a ON a.employee_id = e.id
+        JOIN folder_marks m ON m.employee_id = e.id AND m.cycle_id = ?
         ORDER BY e.name
-        """
+        """,
+        (cycle_id,),
     )
     employees = cursor.fetchall()
     if not employees:
-        return ["Бириктирилган ходимлар йўқ."]
+        return ["Ҳали ҳеч ким папка белгиламаган."]
 
     header = f"📂 ҚОЛГАН ПАПКАЛАР\n\nЦикл: {cycle_title}\n\n"
     parts = []
@@ -283,6 +356,20 @@ def setup_db():
         logged_in_at TEXT NOT NULL
     )
     """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS folder_marks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id INTEGER NOT NULL,
+        employee_id INTEGER NOT NULL,
+        folder_id INTEGER NOT NULL,
+        marked_at TEXT NOT NULL,
+        UNIQUE(cycle_id, folder_id),
+        UNIQUE(cycle_id, employee_id, folder_id)
+    )
+    """)
+
+    ensure_column("submissions", "posted_to_group", "INTEGER NOT NULL DEFAULT 0")
 
     # telegram_id uchun unique index
     cursor.execute("""
@@ -527,7 +614,7 @@ def sync_assignments_from_excel(excel_path: str) -> str:
     )
 
 
-startup_import_result = sync_assignments_from_excel(EXCEL_FILE)
+startup_import_result = import_from_excel(EXCEL_FILE)
 
 
 # ==========================================
@@ -562,6 +649,10 @@ class DeleteReportState(StatesGroup):
     waiting_submission_id = State()
 
 
+class MarkFoldersState(StatesGroup):
+    waiting_folder_ids = State()
+
+
 class SubmitState(StatesGroup):
     waiting_folder_id = State()
     waiting_counted_ok = State()
@@ -586,7 +677,7 @@ async def group_full_report(message: Message):
     cycle_id = cycle["id"]
     cycle_title = cycle["title"]
 
-    cursor.execute("SELECT COUNT(*) AS c FROM assignments")
+    cursor.execute("SELECT COUNT(*) AS c FROM folder_marks WHERE cycle_id = ?", (cycle_id,))
     total_assignments = cursor.fetchone()["c"]
 
     cursor.execute("SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ?", (cycle_id,))
@@ -604,7 +695,7 @@ async def group_full_report(message: Message):
     report = (
         f"📊 УМУМИЙ СКЛАД ҲИСОБОТИ\n\n"
         f"Цикл: {cycle_title}\n"
-        f"Жами бириктирилган папкалар: {total_assignments}\n"
+        f"Жами белгиланган папкалар: {total_assignments}\n"
         f"Топширилган ҳисоботлар: {total_submitted}\n"
         f"Қолган папкалар: {max(total_assignments - total_submitted, 0)}\n\n"
         f"✅ Остаток тўғри: {counted_ok}\n"
@@ -631,19 +722,19 @@ async def group_employee_report(message: Message):
         SELECT 
             e.id,
             e.name,
-            COUNT(DISTINCT a.folder_id) AS assigned_count,
+            COUNT(DISTINCT fm.folder_id) AS assigned_count,
             COUNT(DISTINCT s.folder_id) AS submitted_count,
             SUM(CASE WHEN s.counted_ok = 1 THEN 1 ELSE 0 END) AS counted_ok_count,
             SUM(CASE WHEN s.location_ok = 1 THEN 1 ELSE 0 END) AS location_ok_count,
             COALESCE(SUM(s.wrong_location_count), 0) AS wrong_locations
         FROM employees e
-        LEFT JOIN assignments a ON a.employee_id = e.id
+        LEFT JOIN folder_marks fm ON fm.employee_id = e.id AND fm.cycle_id = ?
         LEFT JOIN submissions s 
             ON s.employee_id = e.id 
            AND s.cycle_id = ?
         GROUP BY e.id, e.name
         ORDER BY e.name
-    """, (cycle_id,))
+    """, (cycle_id, cycle_id,))
     rows = cursor.fetchall()
 
     if not rows:
@@ -651,7 +742,7 @@ async def group_employee_report(message: Message):
 
     text = f"👥 ХОДИМЛАР ҲИСОБОТИ\n\nЦикл: {cycle_title}\n\n"
     for row in rows:
-        assigned = row["assigned_count"] or 0
+        assigned = row["assigned_count"] or 0  # белгиланган папкалар
         submitted = row["submitted_count"] or 0
         counted_ok = row["counted_ok_count"] or 0
         location_ok = row["location_ok_count"] or 0
@@ -854,8 +945,9 @@ async def help_handler(message: Message):
         "• Ходимлар личкада ишлайди\n"
         "• Гуруҳга фақат якунланган ҳисобот кетади\n"
         "• Гуруҳда /hisobot /hodimlar /papkalar /qolgan командалари ишлайди\n"
-        "• Админ: 📂 Қолган папкалар — кимда неча ва қайси папка қолган\n"
-        "• Админ ҳисоботни ўчира олади\n"
+        "• Аввал 📌 Папкаларни белгилаш, кейин 📝 Текширув топшириш\n"
+        "• Гуруҳга ходим эмас, админ 📤 Гуруҳга юбориш билан юборади\n"
+        "• Админ: 📂 Қолган папкалар\n"
         "• Меню янгиланмаса: /start ёки /menu"
     )
     markup = admin_menu() if is_admin(message.from_user.id) else None
@@ -878,7 +970,7 @@ async def menu_refresh_handler(message: Message, state: FSMContext):
     await message.answer("Аввал киринг.", reply_markup=login_keyboard())
 
 
-@dp.message(F.text == "📋 Менга берилган папкалар")
+@dp.message(F.text.in_({"📋 Менга берилган папкалар", "📋 Белгиланган папкалар"}))
 async def my_folders_handler(message: Message):
     if not is_private(message):
         return
@@ -889,25 +981,23 @@ async def my_folders_handler(message: Message):
         return await message.answer("Админ учун бу бўлим шарт эмас.")
 
     employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+    cycle = get_active_cycle()
     if not employee:
         return await message.answer("Сиз ходим сифатида топилмадингиз.")
+    if not cycle:
+        return await message.answer("Актив цикл йўқ.")
 
-    cursor.execute("""
-        SELECT f.id, f.name
-        FROM assignments a
-        JOIN folders f ON f.id = a.folder_id
-        WHERE a.employee_id = ?
-        ORDER BY f.id
-    """, (employee["id"],))
-    rows = cursor.fetchall()
-
+    rows = get_marked_folders(employee["id"], cycle["id"])
     if not rows:
-        return await message.answer("Сизга ҳали папка бириктирилмаган.")
+        return await message.answer(
+            "Ҳали папка белгиламагансиз.\n📌 Папкаларни белгилаш тугмасини босинг.",
+            reply_markup=employee_menu(),
+        )
 
-    text = "📋 Сизга бириктирилган папкалар:\n\n"
+    text = f"📋 Белгиланган папкалар ({cycle['title']}):\n\n"
     for row in rows:
         text += f"{row['id']}. {row['name']}\n"
-    await message.answer(text)
+    await message.answer(text, reply_markup=employee_menu())
 
 
 @dp.message(F.text == "📝 Актив текширувларим")
@@ -928,24 +1018,21 @@ async def active_checks_handler(message: Message):
     if not cycle:
         return await message.answer("Ҳозирча актив цикл йўқ.")
 
-    cursor.execute("""
-        SELECT f.id, f.name
-        FROM assignments a
-        JOIN folders f ON f.id = a.folder_id
-        WHERE a.employee_id = ?
-          AND f.id NOT IN (
-              SELECT folder_id
-              FROM submissions
-              WHERE employee_id = ? AND cycle_id = ?
-          )
-        ORDER BY f.id
-    """, (employee["id"], employee["id"], cycle["id"]))
-    rows = cursor.fetchall()
+    rows = get_remaining_folders_for_employee(employee["id"], cycle["id"])
 
     if not rows:
-        return await message.answer(f"✅ Сиз цикл бўйича барча ҳисоботни топшириб бўлгансиз.\n\nЦикл: {cycle['title']}")
+        marked = get_marked_folders(employee["id"], cycle["id"])
+        if not marked:
+            return await message.answer(
+                f"📌 Аввал папкаларни белгиланг.\n\nЦикл: {cycle['title']}",
+                reply_markup=employee_menu(),
+            )
+        return await message.answer(
+            f"✅ Белгиланган барча папка бўйича ҳисобот топширилган.\n\nЦикл: {cycle['title']}",
+            reply_markup=employee_menu(),
+        )
 
-    text = f"📝 Актив цикл: {cycle['title']}\n\nҚолган папкалар:\n"
+    text = f"📝 Актив цикл: {cycle['title']}\n\nТекшириш керак (белгиланган):\n"
     for row in rows:
         text += f"{row['id']}. {row['name']}\n"
     await message.answer(text)
@@ -966,6 +1053,59 @@ async def admin_remaining_folders_handler(message: Message):
 
     for part in build_admin_remaining_folders_report(cycle):
         await message.answer(part, reply_markup=admin_menu())
+
+
+@dp.message(F.text == "📤 Гуруҳга юбориш")
+async def admin_post_group_handler(message: Message, bot: Bot):
+    if not is_private(message):
+        return
+    if not is_admin(message.from_user.id):
+        return await message.answer("⛔ Сиз админ эмассиз.")
+
+    cycle = get_active_cycle() or get_cycle_for_reports()
+    if not cycle:
+        return await message.answer("Актив ёки охирги цикл топилмади.")
+
+    cursor.execute(
+        """
+        SELECT s.*, e.name AS employee_name, f.name AS folder_name
+        FROM submissions s
+        JOIN employees e ON e.id = s.employee_id
+        JOIN folders f ON f.id = s.folder_id
+        WHERE s.cycle_id = ? AND s.posted_to_group = 0
+        ORDER BY s.id
+        """,
+        (cycle["id"],),
+    )
+    rows = cursor.fetchall()
+    if not rows:
+        remaining_parts = build_admin_remaining_folders_report(cycle)
+        await message.answer(
+            "Гуруҳга юбориш учун тайёр ҳисобот йўқ.\n\n" + (remaining_parts[0][:1500] if remaining_parts else ""),
+            reply_markup=admin_menu(),
+        )
+        return
+
+    sent = 0
+    errors = 0
+    for row in rows:
+        report_text = format_submission_group_text(
+            cycle["title"], row["employee_name"], row["folder_name"], row
+        )
+        try:
+            await bot.send_message(GROUP_ID, report_text)
+            cursor.execute("UPDATE submissions SET posted_to_group = 1 WHERE id = ?", (row["id"],))
+            conn.commit()
+            sent += 1
+        except Exception:
+            errors += 1
+
+    await message.answer(
+        f"✅ Гуруҳга юборилди: {sent} та ҳисобот.\n"
+        + (f"⚠️ Хато: {errors} та\n" if errors else "")
+        + "Қолган белгиланмаган/топширилмаган папкалар: 📂 Қолган папкалар",
+        reply_markup=admin_menu(),
+    )
 
 
 @dp.message(Command("qolgan"))
@@ -995,15 +1135,21 @@ async def status_handler(message: Message):
         return await message.answer("Актив цикл йўқ.")
 
     if is_admin(message.from_user.id):
-        cursor.execute("SELECT COUNT(*) AS c FROM assignments")
+        cursor.execute("SELECT COUNT(*) AS c FROM folder_marks WHERE cycle_id = ?", (cycle["id"],))
         total = cursor.fetchone()["c"]
         cursor.execute("SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ?", (cycle["id"],))
         done = cursor.fetchone()["c"]
+        cursor.execute(
+            "SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ? AND posted_to_group = 0",
+            (cycle["id"],),
+        )
+        pending_group = cursor.fetchone()["c"]
         return await message.answer(
             f"📈 Админ ҳолати\n\n"
             f"Цикл: {cycle['title']}\n"
-            f"Жами бириктирмалар: {total}\n"
+            f"Белгиланган папкалар: {total}\n"
             f"Топширилган ҳисоботлар: {done}\n"
+            f"Гуруҳга кутилмоқда: {pending_group}\n"
             f"Қолгани: {max(total - done, 0)}"
         )
 
@@ -1011,7 +1157,7 @@ async def status_handler(message: Message):
     if not employee:
         return await message.answer("Сиз ходим сифатида топилмадингиз.")
 
-    cursor.execute("SELECT COUNT(*) AS c FROM assignments WHERE employee_id = ?", (employee["id"],))
+    cursor.execute("SELECT COUNT(*) AS c FROM folder_marks WHERE employee_id = ? AND cycle_id = ?", (employee["id"], cycle["id"]))
     total = cursor.fetchone()["c"]
     cursor.execute(
         "SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ? AND employee_id = ?",
@@ -1022,7 +1168,7 @@ async def status_handler(message: Message):
     await message.answer(
         f"📊 Ҳолатингиз\n\n"
         f"Цикл: {cycle['title']}\n"
-        f"Бириктирилган папкалар: {total}\n"
+        f"Белгиланган папкалар: {total}\n"
         f"Топширилганлари: {done}\n"
         f"Қолгани: {max(total - done, 0)}"
     )
@@ -1398,19 +1544,140 @@ async def active_cycle_status_handler(message: Message):
     if not cycle:
         return await message.answer("Актив цикл йўқ.")
 
-    cursor.execute("SELECT COUNT(*) AS c FROM assignments")
-    total_assignments = cursor.fetchone()["c"]
+    cursor.execute("SELECT COUNT(*) AS c FROM folder_marks WHERE cycle_id = ?", (cycle["id"],))
+    total_marks = cursor.fetchone()["c"]
     cursor.execute("SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ?", (cycle["id"],))
     submitted = cursor.fetchone()["c"]
+    cursor.execute(
+        "SELECT COUNT(*) AS c FROM submissions WHERE cycle_id = ? AND posted_to_group = 0",
+        (cycle["id"],),
+    )
+    pending_group = cursor.fetchone()["c"]
 
     text = (
         f"📈 Актив цикл ҳолати\n\n"
         f"Цикл: {cycle['title']}\n"
-        f"Жами бириктирмалар: {total_assignments}\n"
+        f"Белгиланган папкалар: {total_marks}\n"
         f"Топширилган ҳисоботлар: {submitted}\n"
-        f"Қолгани: {max(total_assignments - submitted, 0)}"
+        f"Гуруҳга кутилмоқда: {pending_group}\n"
+        f"Қолгани: {max(total_marks - submitted, 0)}"
     )
     await message.answer(text)
+
+
+# ==========================================
+# FOLDER MARKING (ходим ўзи белгилайди)
+# ==========================================
+@dp.message(F.text == "📌 Папкаларни белгилаш")
+async def mark_folders_start(message: Message, state: FSMContext):
+    if not is_private(message):
+        return
+    if not require_login_or_admin(message):
+        return await message.answer("Аввал киринг.", reply_markup=login_keyboard())
+    if is_admin(message.from_user.id):
+        return await message.answer("Админ учун бу бўлим ишлатилмайди.")
+
+    employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+    cycle = get_active_cycle()
+    if not employee:
+        return await message.answer("Сиз ходим сифатида топилмадингиз.")
+    if not cycle:
+        return await message.answer("Ҳозирча актив цикл йўқ.")
+
+    marked = get_marked_folders(employee["id"], cycle["id"])
+    available = get_available_folders_for_mark(cycle["id"])
+
+    text = (
+        f"📌 Папкаларни белгилаш\n\nЦикл: {cycle['title']}\n\n"
+        f"Сизда белгиланган: {len(marked)} та\n"
+    )
+    if marked:
+        text += "\nБелгиланганлар:\n"
+        for row in marked[:15]:
+            text += f"  {row['id']}. {row['name']}\n"
+        if len(marked) > 15:
+            text += f"  ... ва яна {len(marked) - 15} та\n"
+
+    text += (
+        "\n➕ Қўшиш: папка ID рақамларини юборинг (масалан: 12 45 67)\n"
+        "✅ Белгилаш тугади — тугмаси\n\n"
+    )
+    if available:
+        text += f"Бўш папкалар ({len(available)} та), биринчи 25:\n"
+        for row in available[:25]:
+            text += f"  {row['id']}. {row['name']}\n"
+        if len(available) > 25:
+            text += "  ... рўйхатни кўриш учун ID юборинг\n"
+    else:
+        text += "Бўш папка қолмади (барчаси банд).\n"
+
+    await state.set_state(MarkFoldersState.waiting_folder_ids)
+    await message.answer(text, reply_markup=mark_folder_keyboard())
+
+
+@dp.message(MarkFoldersState.waiting_folder_ids)
+async def mark_folders_add(message: Message, state: FSMContext):
+    if message.text == "❌ Бекор қилиш":
+        await state.clear()
+        return await message.answer("Бекор қилинди.", reply_markup=employee_menu())
+
+    if message.text == "✅ Белгилаш тугади":
+        await state.clear()
+        employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+        cycle = get_active_cycle()
+        if not employee or not cycle:
+            return await message.answer("Ходим ёки цикл топилмади.", reply_markup=employee_menu())
+        marked = get_marked_folders(employee["id"], cycle["id"])
+        return await message.answer(
+            f"✅ Сақланди: {len(marked)} та папка белгиланган.\n"
+            "Энди 📝 Текширув топшириш орқали ҳисобот тўлдиринг.",
+            reply_markup=employee_menu(),
+        )
+
+    employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        await state.clear()
+        return await message.answer("Ходим ёки цикл топилмади.", reply_markup=employee_menu())
+
+    folder_ids = parse_folder_id_list(message.text or "")
+    if not folder_ids:
+        return await message.answer("Папка ID рақамларини юборинг. Масалан: 12 45 67")
+
+    added = 0
+    skipped = 0
+    errors = []
+    for folder_id in folder_ids:
+        folder = get_folder_by_id(folder_id)
+        if not folder:
+            errors.append(f"ID {folder_id} топилмади")
+            continue
+        cursor.execute(
+            "SELECT e.name FROM folder_marks m JOIN employees e ON e.id = m.employee_id WHERE m.cycle_id = ? AND m.folder_id = ?",
+            (cycle["id"], folder_id),
+        )
+        taken = cursor.fetchone()
+        if taken and taken["name"] != employee["name"]:
+            errors.append(f"{folder['name']} — {taken['name']}да")
+            skipped += 1
+            continue
+        try:
+            cursor.execute(
+                "INSERT INTO folder_marks (cycle_id, employee_id, folder_id, marked_at) VALUES (?, ?, ?, ?)",
+                (cycle["id"], employee["id"], folder_id, now_str()),
+            )
+            conn.commit()
+            added += 1
+        except sqlite3.IntegrityError:
+            skipped += 1
+
+    reply = f"✅ {added} та папка белгиланди."
+    if skipped:
+        reply += f"\n⚠️ {skipped} та ўтказилди (аввал банд/сизда бор)."
+    if errors:
+        reply += "\n" + "\n".join(errors[:5])
+    reply += "\n\nЯна ID юборинг ёки ✅ Белгилаш тугади."
+    await message.answer(reply, reply_markup=mark_folder_keyboard())
 
 
 # ==========================================
@@ -1433,22 +1700,19 @@ async def submit_start(message: Message, state: FSMContext):
     if not cycle:
         return await message.answer("Ҳозирча актив цикл йўқ.")
 
-    cursor.execute("""
-        SELECT f.id, f.name
-        FROM assignments a
-        JOIN folders f ON f.id = a.folder_id
-        WHERE a.employee_id = ?
-          AND f.id NOT IN (
-              SELECT folder_id
-              FROM submissions
-              WHERE cycle_id = ? AND employee_id = ?
-          )
-        ORDER BY f.id
-    """, (employee["id"], cycle["id"], employee["id"]))
-    rows = cursor.fetchall()
+    rows = get_remaining_folders_for_employee(employee["id"], cycle["id"])
 
     if not rows:
-        return await message.answer(f"✅ Сиз цикл бўйича барча ҳисоботни топшириб бўлгансиз.\n\nЦикл: {cycle['title']}")
+        marked = get_marked_folders(employee["id"], cycle["id"])
+        if not marked:
+            return await message.answer(
+                f"📌 Аввал папкаларни белгиланг.\n\nЦикл: {cycle['title']}",
+                reply_markup=employee_menu(),
+            )
+        return await message.answer(
+            f"✅ Белгиланган барча папка бўйича ҳисобот топширилган.\n\nЦикл: {cycle['title']}",
+            reply_markup=employee_menu(),
+        )
 
     text = f"Қайси папка бўйича ҳисобот топширасиз?\n\nЦикл: {cycle['title']}\n"
     for row in rows:
@@ -1478,14 +1742,14 @@ async def submit_get_folder(message: Message, state: FSMContext):
 
     cursor.execute("""
         SELECT f.id, f.name
-        FROM assignments a
-        JOIN folders f ON f.id = a.folder_id
-        WHERE a.employee_id = ? AND f.id = ?
-    """, (employee["id"], folder_id))
+        FROM folder_marks m
+        JOIN folders f ON f.id = m.folder_id
+        WHERE m.employee_id = ? AND m.cycle_id = ? AND f.id = ?
+    """, (employee["id"], cycle["id"], folder_id))
     folder = cursor.fetchone()
 
     if not folder:
-        return await message.answer("Бу папка сизга бириктирилмаган.")
+        return await message.answer("Бу папка сиз белгиламагансиз. Аввал 📌 Папкаларни белгилаш.")
 
     cursor.execute("""
         SELECT id FROM submissions
@@ -1568,12 +1832,13 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
 
     data = await state.get_data()
 
+    submitted_at = now_str()
     cursor.execute("""
         INSERT INTO submissions (
             cycle_id, employee_id, folder_id,
             counted_ok, location_ok, wrong_location_count,
-            fixed_now, comment, submitted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            fixed_now, comment, submitted_at, posted_to_group
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     """, (
         cycle["id"],
         employee["id"],
@@ -1583,42 +1848,15 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
         data.get("wrong_location_count", 0),
         data.get("fixed_now"),
         comment,
-        now_str()
+        submitted_at,
     ))
     conn.commit()
 
-    counted_ok = data["counted_ok"]
-    location_ok = data["location_ok"]
-    wrong_location_count = data.get("wrong_location_count", 0)
-    fixed_now = data.get("fixed_now")
-    folder_name = data["folder_name"]
-
-    report_text = (
-        f"📦 Якунланган склад ҳисоботи\n\n"
-        f"Цикл: {cycle['title']}\n"
-        f"Ходим: {employee['name']}\n"
-        f"Папка: {folder_name}\n"
-        f"Остаток тўғри: {'Ҳа' if counted_ok else 'Йўқ'}\n"
-        f"Место хранения тўғри: {'Ҳа' if location_ok else 'Йўқ'}\n"
-    )
-
-    if location_ok == 0:
-        report_text += (
-            f"Хато место сони: {wrong_location_count}\n"
-            f"Тўғирланди: {'Ҳа' if fixed_now else 'Йўқ'}\n"
-        )
-
-    report_text += f"Изоҳ: {comment}\nВақт: {now_str()}"
-
-    try:
-        await bot.send_message(GROUP_ID, report_text)
-    except Exception as e:
-        await message.answer(f"⚠️ Гуруҳга юборишда муаммо: {e}")
-
     await state.clear()
     await message.answer(
-        "✅ Ҳисобот қабул қилинди.\nГуруҳга якунланган ҳисобот юборилди.",
-        reply_markup=employee_menu()
+        "✅ Ҳисобот сақланди.\n"
+        "Гуруҳга админ 📤 Гуруҳга юбориш орқали юборади.",
+        reply_markup=employee_menu(),
     )
 
 
