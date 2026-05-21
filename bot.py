@@ -9,7 +9,7 @@ from typing import Optional
 import pandas as pd
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ChatType
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
@@ -124,11 +124,24 @@ def employee_menu() -> ReplyKeyboardMarkup:
 def mark_folder_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="✅ Ҳаммасини белгилаш")],
             [KeyboardButton(text="✅ Белгилаш тугади")],
             [KeyboardButton(text="❌ Бекор қилиш")],
         ],
         resize_keyboard=True,
     )
+
+
+EMPLOYEE_MENU_BUTTONS = frozenset({
+    "📌 Папкаларни белгилаш",
+    "📝 Текширув топшириш",
+    "📝 Актив текширувларим",
+    "📋 Белгиланган папкалар",
+    "📋 Менга берилган папкалар",
+    "📊 Ҳолатим",
+    "🔓 Чиқиш",
+    "❓ Ёрдам",
+})
 
 
 def current_menu(user_id: int):
@@ -168,19 +181,60 @@ def get_remaining_folders_for_employee(employee_id: int, cycle_id: int) -> list:
     return cursor.fetchall()
 
 
-def get_available_folders_for_mark(cycle_id: int) -> list:
+def get_employee_assignment_folders(employee_id: int) -> list:
     cursor.execute(
         """
         SELECT f.id, f.name
-        FROM folders f
-        WHERE f.id NOT IN (
-            SELECT folder_id FROM folder_marks WHERE cycle_id = ?
-        )
+        FROM assignments a
+        JOIN folders f ON f.id = a.folder_id
+        WHERE a.employee_id = ?
         ORDER BY f.name
         """,
-        (cycle_id,),
+        (employee_id,),
     )
     return cursor.fetchall()
+
+
+def get_unmarked_assignment_folders(employee_id: int, cycle_id: int) -> list:
+    cursor.execute(
+        """
+        SELECT f.id, f.name
+        FROM assignments a
+        JOIN folders f ON f.id = a.folder_id
+        WHERE a.employee_id = ?
+          AND f.id NOT IN (
+              SELECT folder_id FROM folder_marks
+              WHERE cycle_id = ? AND employee_id = ?
+          )
+        ORDER BY f.name
+        """,
+        (employee_id, cycle_id, employee_id),
+    )
+    return cursor.fetchall()
+
+
+def is_folder_assigned_to_employee(employee_id: int, folder_id: int) -> bool:
+    cursor.execute(
+        "SELECT 1 FROM assignments WHERE employee_id = ? AND folder_id = ?",
+        (employee_id, folder_id),
+    )
+    return cursor.fetchone() is not None
+
+
+def mark_all_assignment_folders(employee_id: int, cycle_id: int) -> int:
+    rows = get_unmarked_assignment_folders(employee_id, cycle_id)
+    added = 0
+    for row in rows:
+        try:
+            cursor.execute(
+                "INSERT INTO folder_marks (cycle_id, employee_id, folder_id, marked_at) VALUES (?, ?, ?, ?)",
+                (cycle_id, employee_id, row["id"], now_str()),
+            )
+            conn.commit()
+            added += 1
+        except sqlite3.IntegrityError:
+            pass
+    return added
 
 
 def parse_folder_id_list(text: str) -> list[int]:
@@ -614,7 +668,7 @@ def sync_assignments_from_excel(excel_path: str) -> str:
     )
 
 
-startup_import_result = import_from_excel(EXCEL_FILE)
+startup_import_result = sync_assignments_from_excel(EXCEL_FILE)
 
 
 # ==========================================
@@ -1584,35 +1638,36 @@ async def mark_folders_start(message: Message, state: FSMContext):
     if not cycle:
         return await message.answer("Ҳозирча актив цикл йўқ.")
 
+    assigned = get_employee_assignment_folders(employee["id"])
+    if not assigned:
+        return await message.answer(
+            f"Сизга Excel бўйича папка бириктирилмаган.\n"
+            f"Админга мурожаат қилинг (📥 Excel импорт).\n\nХодим: {employee['name']}",
+            reply_markup=employee_menu(),
+        )
+
     marked = get_marked_folders(employee["id"], cycle["id"])
-    available = get_available_folders_for_mark(cycle["id"])
+    marked_ids = {r["id"] for r in marked}
+    unmarked = [r for r in assigned if r["id"] not in marked_ids]
 
     text = (
-        f"📌 Папкаларни белгилаш\n\nЦикл: {cycle['title']}\n\n"
-        f"Сизда белгиланган: {len(marked)} та\n"
+        f"📌 Сизнинг папкаларингиз\n\n"
+        f"Цикл: {cycle['title']}\n"
+        f"Ходим: {employee['name']}\n"
+        f"Жами сизга: {len(assigned)} та | Белгиланган: {len(marked)} | Қолди: {len(unmarked)}\n\n"
     )
-    if marked:
-        text += "\nБелгиланганлар:\n"
-        for row in marked[:15]:
-            text += f"  {row['id']}. {row['name']}\n"
-        if len(marked) > 15:
-            text += f"  ... ва яна {len(marked) - 15} та\n"
+    for row in assigned:
+        flag = "✅" if row["id"] in marked_ids else "⬜"
+        text += f"{flag} {row['id']}. {row['name']}\n"
 
     text += (
-        "\n➕ Қўшиш: папка ID рақамларини юборинг (масалан: 12 45 67)\n"
-        "✅ Белгилаш тугади — тугмаси\n\n"
+        "\n➕ ID юборинг (масалан: 12 45) ёки ✅ Ҳаммасини белгилаш\n"
+        "✅ Белгилаш тугади — тугмаси\n"
     )
-    if available:
-        text += f"Бўш папкалар ({len(available)} та), биринчи 25:\n"
-        for row in available[:25]:
-            text += f"  {row['id']}. {row['name']}\n"
-        if len(available) > 25:
-            text += "  ... рўйхатни кўриш учун ID юборинг\n"
-    else:
-        text += "Бўш папка қолмади (барчаси банд).\n"
 
     await state.set_state(MarkFoldersState.waiting_folder_ids)
-    await message.answer(text, reply_markup=mark_folder_keyboard())
+    for part in chunk_text(text):
+        await message.answer(part, reply_markup=mark_folder_keyboard())
 
 
 @dp.message(MarkFoldersState.waiting_folder_ids)
@@ -1634,6 +1689,20 @@ async def mark_folders_add(message: Message, state: FSMContext):
             reply_markup=employee_menu(),
         )
 
+    if message.text == "✅ Ҳаммасини белгилаш":
+        employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+        cycle = get_active_cycle()
+        if not employee or not cycle:
+            await state.clear()
+            return await message.answer("Ходим ёки цикл топилмади.", reply_markup=employee_menu())
+        added = mark_all_assignment_folders(employee["id"], cycle["id"])
+        marked = get_marked_folders(employee["id"], cycle["id"])
+        return await message.answer(
+            f"✅ {added} та янги папка белгиланди.\nЖами: {len(marked)} та.\n"
+            "📝 Текширув топшириш ёки ✅ Белгилаш тугади.",
+            reply_markup=mark_folder_keyboard(),
+        )
+
     employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
     cycle = get_active_cycle()
     if not employee or not cycle:
@@ -1652,13 +1721,8 @@ async def mark_folders_add(message: Message, state: FSMContext):
         if not folder:
             errors.append(f"ID {folder_id} топилмади")
             continue
-        cursor.execute(
-            "SELECT e.name FROM folder_marks m JOIN employees e ON e.id = m.employee_id WHERE m.cycle_id = ? AND m.folder_id = ?",
-            (cycle["id"], folder_id),
-        )
-        taken = cursor.fetchone()
-        if taken and taken["name"] != employee["name"]:
-            errors.append(f"{folder['name']} — {taken['name']}да")
+        if not is_folder_assigned_to_employee(employee["id"], folder_id):
+            errors.append(f"{folder['name']} — сизга бириктирилмаган")
             skipped += 1
             continue
         try:
@@ -1932,6 +1996,37 @@ async def reimport_command(message: Message):
         return await message.answer("⛔ Сиз админ эмассиз.")
     result = sync_assignments_from_excel(EXCEL_FILE)
     await message.answer(f"✅ {result}")
+
+
+async def route_employee_menu(message: Message, state: FSMContext):
+    """Меню тугмаси — FSM дан чиқиб, керакли бўлимга ўтadi."""
+    text = message.text or ""
+    if text == "📌 Папкаларни белгилаш":
+        return await mark_folders_start(message, state)
+    if text == "📝 Текширув топшириш":
+        return await submit_start(message, state)
+    if text == "📝 Актив текширувларим":
+        return await active_checks_handler(message)
+    if text in ("📋 Белгиланган папкалар", "📋 Менга берилган папкалар"):
+        return await my_folders_handler(message)
+    if text == "📊 Ҳолатим":
+        return await status_handler(message)
+    if text == "🔓 Чиқиш":
+        return await logout_handler(message, state)
+    if text == "❓ Ёрдам":
+        return await help_handler(message)
+
+
+@dp.message(StateFilter(MarkFoldersState), F.text.in_(EMPLOYEE_MENU_BUTTONS))
+async def mark_state_menu_escape(message: Message, state: FSMContext):
+    await state.clear()
+    return await route_employee_menu(message, state)
+
+
+@dp.message(StateFilter(SubmitState), F.text.in_(EMPLOYEE_MENU_BUTTONS))
+async def submit_state_menu_escape(message: Message, state: FSMContext):
+    await state.clear()
+    return await route_employee_menu(message, state)
 
 
 @dp.message()
