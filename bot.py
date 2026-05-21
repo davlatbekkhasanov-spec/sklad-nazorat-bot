@@ -4,6 +4,8 @@ import re
 import secrets
 import sqlite3
 from datetime import datetime
+
+from time_util import now_str
 from typing import Optional
 
 import pandas as pd
@@ -61,10 +63,6 @@ DEFAULT_PASSWORDS = {
 # ==========================================
 # HELPERS
 # ==========================================
-def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 def clean_text(value) -> str:
     text = str(value or "").strip()
     text = re.sub(r"^[◼▪•●■\-\s]+", "", text)

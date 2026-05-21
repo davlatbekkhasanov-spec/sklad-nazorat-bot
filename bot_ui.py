@@ -7,6 +7,8 @@ from typing import Optional
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from time_util import format_submitted_at_display, today_display
+
 FOLDER_PAGE_SIZE = 6
 
 
@@ -53,15 +55,6 @@ def submission_quality_percent(
     if not location_ok and wrong_location_count:
         score = max(0, score - min(35, int(wrong_location_count) * 5))
     return min(100, score)
-
-
-def format_submitted_at_display(submitted_at: str) -> str:
-    raw = str(submitted_at or "").strip()
-    try:
-        dt = __import__("datetime").datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
-        return dt.strftime("%d.%m.%Y · %H:%M")
-    except ValueError:
-        return raw
 
 
 def truncate_label(name: str, limit: int = 36) -> str:
@@ -142,7 +135,7 @@ def build_dashboard_text(
     to_sanash: int,
     done: int,
 ) -> str:
-    today = __import__("datetime").datetime.now().strftime("%d.%m.%Y")
+    today = today_display()
     bar = progress_bar(done, total)
     return (
         f"<b>📊 Бугунги иш</b>\n"
@@ -175,6 +168,7 @@ def format_submission_group_html(
         fixed_now=fixed_now,
     )
     day_pct = day_progress_percent(day_done, day_total)
+    day_left = max(0, day_total - day_done)
     q_bar = percent_bar(quality)
     d_bar = percent_bar(day_pct)
 
@@ -198,7 +192,8 @@ def format_submission_group_html(
         f"<code>{q_bar}</code>  <b>{quality}%</b>",
         "",
         f"<b>📈 Кунлик юкланиш</b>",
-        f"<code>{d_bar}</code>  <b>{day_pct}%</b>  ({day_done}/{day_total})",
+        f"<code>{d_bar}</code>  <b>{day_pct}%</b>",
+        f"✅ Саналди: <b>{day_done}</b>  ·  📝 Қолди: <b>{day_left}</b>  ·  📦 Жами: <b>{day_total}</b>",
         "",
         "┌ <b>Натижа</b> ─────────",
         f"│ Остаток  {'✅' if counted_ok else '❌'}",
