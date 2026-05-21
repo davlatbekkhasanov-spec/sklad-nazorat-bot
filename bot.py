@@ -8,17 +8,28 @@ from typing import Optional
 
 import pandas as pd
 from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ChatType
+from aiogram.enums import ChatType, ParseMode
 from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    CallbackQuery,
     Message,
     ReplyKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardRemove,
 )
 from dotenv import load_dotenv
+
+from bot_ui import (
+    FOLDER_PAGE_SIZE,
+    build_dashboard_text,
+    dashboard_keyboard,
+    folder_list_keyboard,
+    format_submission_group_html,
+    he,
+    inline_yes_no,
+)
 
 load_dotenv()
 
@@ -112,12 +123,12 @@ def admin_menu() -> ReplyKeyboardMarkup:
 def employee_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📌 Папкаларни белгилаш")],
-            [KeyboardButton(text="📝 Текширув топшириш"), KeyboardButton(text="📝 Актив текширувларим")],
-            [KeyboardButton(text="📋 Белгиланган папкалар"), KeyboardButton(text="📊 Ҳолатим")],
-            [KeyboardButton(text="🔓 Чиқиш"), KeyboardButton(text="❓ Ёрдам")],
+            [KeyboardButton(text="📊 Бугунги иш")],
+            [KeyboardButton(text="📝 Санаш")],
+            [KeyboardButton(text="📌 Белгилаш")],
+            [KeyboardButton(text="❓ Ёрдам"), KeyboardButton(text="🔓 Чиқиш")],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
 
 
@@ -133,6 +144,9 @@ def mark_folder_keyboard() -> ReplyKeyboardMarkup:
 
 
 EMPLOYEE_MENU_BUTTONS = frozenset({
+    "📊 Бугунги иш",
+    "📝 Санаш",
+    "📌 Белгилаш",
     "📌 Папкаларни белгилаш",
     "📝 Текширув топшириш",
     "📝 Актив текширувларим",
@@ -142,6 +156,86 @@ EMPLOYEE_MENU_BUTTONS = frozenset({
     "🔓 Чиқиш",
     "❓ Ёрдам",
 })
+
+
+def count_submitted_folders(employee_id: int, cycle_id: int) -> int:
+    cursor.execute(
+        "SELECT COUNT(*) AS c FROM submissions WHERE employee_id = ? AND cycle_id = ?",
+        (employee_id, cycle_id),
+    )
+    return int(cursor.fetchone()["c"] or 0)
+
+
+def employee_work_stats(employee_id: int, cycle_id: int) -> dict:
+    assigned = get_employee_assignment_folders(employee_id)
+    total = len(assigned)
+    unmarked = len(get_unmarked_assignment_folders(employee_id, cycle_id))
+    to_submit = len(get_remaining_folders_for_employee(employee_id, cycle_id))
+    done = count_submitted_folders(employee_id, cycle_id)
+    return {"total": total, "unmarked": unmarked, "to_submit": to_submit, "done": done}
+
+
+async def send_dashboard(message: Message, employee, cycle, *, edit_message: Optional[Message] = None):
+    stats = employee_work_stats(employee["id"], cycle["id"])
+    text = build_dashboard_text(
+        employee_name=employee["name"],
+        cycle_title=cycle["title"],
+        total=stats["total"],
+        unmarked=stats["unmarked"],
+        to_submit=stats["to_submit"],
+        done=stats["done"],
+    )
+    kb = dashboard_keyboard()
+    if edit_message:
+        await edit_message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    else:
+        await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+
+async def show_folder_picker(
+    target: Message,
+    employee,
+    cycle,
+    *,
+    mode: str,
+    page: int = 0,
+    edit: bool = False,
+):
+    """mode: p = sanash, m = belgilash"""
+    if mode == "p":
+        rows = get_remaining_folders_for_employee(employee["id"], cycle["id"])
+        title = "📝 <b>Санаш</b>"
+        empty_hint = "📌 Аввал папкаларни белгиланг ёки ҳаммаси саналган."
+        pick_prefix = "p"
+        mark_all = False
+    else:
+        rows = get_unmarked_assignment_folders(employee["id"], cycle["id"])
+        title = "📌 <b>Белгилаш</b>"
+        empty_hint = "✅ Барча папкалар белгиланган."
+        pick_prefix = "m"
+        mark_all = True
+
+    if not rows:
+        if edit:
+            try:
+                await target.edit_text(empty_hint)
+            except Exception:
+                pass
+        else:
+            await target.answer(empty_hint, reply_markup=employee_menu())
+        return
+
+    start = page * FOLDER_PAGE_SIZE
+    text = (
+        f"{title}\n"
+        f"{he(cycle['title'])}\n\n"
+        f"Танланг ({start + 1}–{min(start + FOLDER_PAGE_SIZE, len(rows))} / {len(rows)}):\n"
+    )
+    kb = folder_list_keyboard(rows, page, pick_prefix, show_mark_all=mark_all)
+    if edit:
+        await target.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+    else:
+        await target.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 
 def current_menu(user_id: int):
@@ -907,8 +1001,8 @@ async def start_handler(message: Message, state: FSMContext):
     if is_admin(message.from_user.id):
         await message.answer(
             f"🔥 Админ режимида кирдингиз.\n\n{startup_import_result}\n\n"
-            "📂 Қолган папкалар — менюда ёки /qolgan",
-            reply_markup=admin_menu()
+            "📂 Қолган папкалар · /qolgan",
+            reply_markup=admin_menu(),
         )
         return
 
@@ -916,16 +1010,18 @@ async def start_handler(message: Message, state: FSMContext):
     if existing:
         set_session(message.from_user.id, existing["id"])
         await message.answer(
-            f"🔥 Хуш келибсиз, {existing['name']}",
-            reply_markup=employee_menu()
+            f"🔥 Хуш келибсиз, {he(existing['name'])}\n\n📊 Бугунги иш — бошлаш.",
+            reply_markup=employee_menu(),
+            parse_mode=ParseMode.HTML,
         )
         return
 
     session_emp = get_logged_in_employee(message.from_user.id)
     if session_emp:
         await message.answer(
-            f"🔥 Хуш келибсиз, {session_emp['name']}",
-            reply_markup=employee_menu()
+            f"🔥 Хуш келибсиз, {he(session_emp['name'])}\n\n📊 Бугунги иш — бошлаш.",
+            reply_markup=employee_menu(),
+            parse_mode=ParseMode.HTML,
         )
         return
 
@@ -1008,9 +1104,10 @@ async def help_handler(message: Message):
         "• Ходимлар личкада ишлайди\n"
         "• Гуруҳга фақат якунланган ҳисобот кетади\n"
         "• Гуруҳда /hisobot /hodimlar /papkalar /qolgan командалари ишлайди\n"
-        "• 📌 Белгилаш — гуруҳга кетмайди, актив рўйхатдан чиқади\n"
-        "• 📝 Текширув топшириш — ҳисобот гуруҳга кетади\n"
-        "• Админ: 📂 Қолган папкалар ёки 📝 Актив текширувларим\n"
+        "• 📊 Бугунги иш — прогресс ва қисқа холат\n"
+        "• 📌 Белгилаш — inline тугма (гуруҳга кетмайди)\n"
+        "• 📝 Санаш — inline тугма (гуруҳга кетади)\n"
+        "• /sanash /holat — тез буйруқлар\n"
         "• Меню янгиланмаса: /start ёки /menu"
     )
     markup = admin_menu() if is_admin(message.from_user.id) else None
@@ -1029,7 +1126,10 @@ async def menu_refresh_handler(message: Message, state: FSMContext):
         )
     session_emp = get_logged_in_employee(message.from_user.id) or get_employee_by_tg(message.from_user.id)
     if session_emp:
-        return await message.answer("✅ Меню янгиланди.", reply_markup=employee_menu())
+        return await message.answer(
+            "✅ Меню янгиланди.\n📊 Бугунги иш · 📝 Санаш · 📌 Белгилаш",
+            reply_markup=employee_menu(),
+        )
     await message.answer("Аввал киринг.", reply_markup=login_keyboard())
 
 
@@ -1696,47 +1796,75 @@ async def mark_folders_add(message: Message, state: FSMContext):
 
 
 # ==========================================
-# REPORT SUBMISSION
+# DASHBOARD & INLINE UI
 # ==========================================
-@dp.message(F.text == "📝 Текширув топшириш")
-async def submit_start(message: Message, state: FSMContext):
+@dp.message(F.text.in_({"📊 Бугунги иш", "📊 Ҳолатим"}))
+async def dashboard_handler(message: Message, state: FSMContext):
     if not is_private(message):
         return
     if not require_login_or_admin(message):
         return await message.answer("Аввал киринг.", reply_markup=login_keyboard())
     if is_admin(message.from_user.id):
-        return await message.answer("Админ учун бу бўлим ишлатилмайди.")
-
+        cycle = get_active_cycle() or get_cycle_for_reports()
+        if not cycle:
+            return await message.answer("Актив цикл йўқ.")
+        for part in build_admin_remaining_folders_report(cycle):
+            await message.answer(part, reply_markup=admin_menu())
+        return
+    await state.clear()
     employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
     cycle = get_active_cycle()
-
     if not employee:
         return await message.answer("Сиз ходим сифатида топилмадингиз.")
     if not cycle:
         return await message.answer("Ҳозирча актив цикл йўқ.")
-
-    rows = get_remaining_folders_for_employee(employee["id"], cycle["id"])
-
-    if not rows:
-        marked = get_marked_folders(employee["id"], cycle["id"])
-        if not marked:
-            return await message.answer(
-                f"📌 Аввал папкаларни белгиланг.\n\nЦикл: {cycle['title']}",
-                reply_markup=employee_menu(),
-            )
-        return await message.answer(
-            f"✅ Белгиланган барча папка бўйича ҳисобот топширилган.\n\nЦикл: {cycle['title']}",
-            reply_markup=employee_menu(),
-        )
-
-    text = f"Қайси папка бўйича ҳисобот топширасиз?\n\nЦикл: {cycle['title']}\n"
-    for row in rows:
-        text += f"{row['id']}. {row['name']}\n"
-
-    await state.set_state(SubmitState.waiting_folder_id)
-    await message.answer(text, reply_markup=cancel_keyboard())
+    await send_dashboard(message, employee, cycle)
 
 
+@dp.message(Command("holat"))
+async def cmd_holat(message: Message, state: FSMContext):
+    return await dashboard_handler(message, state)
+
+
+@dp.message(F.text.in_({"📝 Санаш", "📝 Текширув топшириш"}))
+@dp.message(Command("sanash"))
+async def sanash_handler(message: Message, state: FSMContext):
+    if not is_private(message):
+        return
+    if not require_login_or_admin(message):
+        return await message.answer("Аввал киринг.", reply_markup=login_keyboard())
+    if is_admin(message.from_user.id):
+        return await message.answer("Админ учун эмас.")
+    await state.clear()
+    employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        return await message.answer("Ходим ёки цикл топилмади.")
+    await show_folder_picker(message, employee, cycle, mode="p", page=0, edit=False)
+
+
+@dp.message(F.text.in_({"📌 Белгилаш", "📌 Папкаларни белгилаш"}))
+async def mark_inline_handler(message: Message, state: FSMContext):
+    if not is_private(message):
+        return
+    if not require_login_or_admin(message):
+        return await message.answer("Аввал киринг.", reply_markup=login_keyboard())
+    if is_admin(message.from_user.id):
+        return await message.answer("Админ учун эмас.")
+    await state.clear()
+    employee = get_employee_by_tg(message.from_user.id) or get_logged_in_employee(message.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        return await message.answer("Ходим ёки цикл топилмади.")
+    assigned = get_employee_assignment_folders(employee["id"])
+    if not assigned:
+        return await message.answer("Сизга Excel бўйича папка бириктирилмаган.", reply_markup=employee_menu())
+    await show_folder_picker(message, employee, cycle, mode="m", page=0, edit=False)
+
+
+# ==========================================
+# REPORT SUBMISSION (матн: изоҳ, хато сони)
+# ==========================================
 @dp.message(SubmitState.waiting_folder_id)
 async def submit_get_folder(message: Message, state: FSMContext):
     if message.text == "❌ Бекор қилиш":
@@ -1873,19 +2001,19 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     ))
     conn.commit()
 
-    report_text = format_submission_group_text(
-        cycle["title"], employee["name"], folder_name,
-        {
-            "counted_ok": counted_ok,
-            "location_ok": location_ok,
-            "wrong_location_count": wrong_location_count,
-            "fixed_now": fixed_now,
-            "comment": comment,
-            "submitted_at": submitted_at,
-        },
+    report_text = format_submission_group_html(
+        cycle["title"],
+        employee["name"],
+        folder_name,
+        counted_ok=counted_ok,
+        location_ok=location_ok,
+        wrong_location_count=wrong_location_count,
+        fixed_now=fixed_now,
+        comment=comment,
+        submitted_at=submitted_at,
     )
     try:
-        await bot.send_message(GROUP_ID, report_text)
+        await bot.send_message(GROUP_ID, report_text, parse_mode=ParseMode.HTML)
         group_note = "Гуруҳга юборилди."
     except Exception as e:
         group_note = f"⚠️ Гуруҳга юборишда муаммо: {e}"
@@ -1894,7 +2022,9 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     await message.answer(
         f"✅ Ҳисобот қабул қилинди.\n{group_note}",
         reply_markup=employee_menu(),
+        parse_mode=ParseMode.HTML,
     )
+    await send_dashboard(message, employee, cycle)
 
 
 # ==========================================
@@ -1953,6 +2083,212 @@ async def delete_report_save(message: Message, state: FSMContext):
 
 
 # ==========================================
+# INLINE CALLBACKS
+# ==========================================
+@dp.callback_query(F.data == "ui:x")
+async def cb_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.answer("Бекор")
+    try:
+        await callback.message.edit_text("❌ Бекор қилинди.")
+    except Exception:
+        pass
+    await callback.message.answer("Менюдан танланг.", reply_markup=current_menu(callback.from_user.id))
+
+
+@dp.callback_query(F.data == "ui:go:dash")
+async def cb_go_dashboard(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        return await callback.message.answer("Ходим ёки цикл топилмади.")
+    stats = employee_work_stats(employee["id"], cycle["id"])
+    text = build_dashboard_text(
+        employee_name=employee["name"],
+        cycle_title=cycle["title"],
+        total=stats["total"],
+        unmarked=stats["unmarked"],
+        to_submit=stats["to_submit"],
+        done=stats["done"],
+    )
+    await callback.message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=dashboard_keyboard())
+
+
+@dp.callback_query(F.data == "ui:go:submit")
+async def cb_go_submit(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        return await callback.message.answer("Ходим ёки цикл топилмади.")
+    await show_folder_picker(callback.message, employee, cycle, mode="p", page=0, edit=True)
+
+
+@dp.callback_query(F.data == "ui:go:mark")
+async def cb_go_mark(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        return await callback.message.answer("Ходим ёки цикл топилмади.")
+    await show_folder_picker(callback.message, employee, cycle, mode="m", page=0, edit=True)
+
+
+@dp.callback_query(F.data == "ui:go:list")
+async def cb_go_list(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        return
+    rows = get_marked_folders(employee["id"], cycle["id"])
+    text = f"<b>📋 Белгиланган</b> ({len(rows)}):\n\n"
+    for row in rows[:40]:
+        text += f"• {he(row['name'])}\n"
+    if len(rows) > 40:
+        text += f"\n<i>… ва яна {len(rows) - 40} та</i>"
+    await callback.message.answer(text, parse_mode=ParseMode.HTML, reply_markup=employee_menu())
+
+
+@dp.callback_query(F.data.regexp(r"^ui:[pm]:p:\d+$"))
+async def cb_folder_page(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    parts = callback.data.split(":")
+    mode = parts[1]
+    page = int(parts[3])
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        return
+    await show_folder_picker(callback.message, employee, cycle, mode=mode, page=page, edit=True)
+
+
+@dp.callback_query(F.data == "ui:m:all")
+async def cb_mark_all(callback: CallbackQuery, state: FSMContext):
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        await callback.answer("Хато", show_alert=True)
+        return
+    added = mark_all_assignment_folders(employee["id"], cycle["id"])
+    await callback.answer(f"✅ {added} та белгиланди", show_alert=True)
+    await show_folder_picker(callback.message, employee, cycle, mode="m", page=0, edit=True)
+
+
+@dp.callback_query(F.data.regexp(r"^ui:m:f:\d+$"))
+async def cb_mark_one(callback: CallbackQuery, state: FSMContext):
+    folder_id = int(callback.data.split(":")[-1])
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        await callback.answer("Хато", show_alert=True)
+        return
+    if not is_folder_assigned_to_employee(employee["id"], folder_id):
+        await callback.answer("Сизга бириктирилмаган", show_alert=True)
+        return
+    try:
+        cursor.execute(
+            "INSERT INTO folder_marks (cycle_id, employee_id, folder_id, marked_at) VALUES (?, ?, ?, ?)",
+            (cycle["id"], employee["id"], folder_id, now_str()),
+        )
+        conn.commit()
+        await callback.answer("✅ Белгиланди")
+    except sqlite3.IntegrityError:
+        await callback.answer("Аввал белгиланган")
+    await show_folder_picker(callback.message, employee, cycle, mode="m", page=0, edit=True)
+
+
+@dp.callback_query(F.data.regexp(r"^ui:p:f:\d+$"))
+async def cb_pick_folder_submit(callback: CallbackQuery, state: FSMContext):
+    folder_id = int(callback.data.split(":")[-1])
+    employee = get_employee_by_tg(callback.from_user.id) or get_logged_in_employee(callback.from_user.id)
+    cycle = get_active_cycle()
+    if not employee or not cycle:
+        await callback.answer("Хато", show_alert=True)
+        return
+    cursor.execute(
+        """
+        SELECT f.id, f.name FROM folder_marks m
+        JOIN folders f ON f.id = m.folder_id
+        WHERE m.employee_id = ? AND m.cycle_id = ? AND f.id = ?
+        """,
+        (employee["id"], cycle["id"], folder_id),
+    )
+    folder = cursor.fetchone()
+    if not folder:
+        await callback.answer("Аввал белгиланг", show_alert=True)
+        return
+    cursor.execute(
+        "SELECT id FROM submissions WHERE cycle_id = ? AND employee_id = ? AND folder_id = ?",
+        (cycle["id"], employee["id"], folder_id),
+    )
+    if cursor.fetchone():
+        await callback.answer("Аввал топширилган", show_alert=True)
+        return
+    await callback.answer()
+    await state.update_data(folder_id=folder["id"], folder_name=folder["name"])
+    await state.set_state(SubmitState.waiting_counted_ok)
+    await callback.message.edit_text(
+        f"📦 <b>{he(folder['name'])}</b>\n\nОстаток 100% тўғри саналдими?",
+        parse_mode=ParseMode.HTML,
+        reply_markup=inline_yes_no("c"),
+    )
+
+
+@dp.callback_query(F.data.regexp(r"^ui:y:[clf]:[01]$"))
+async def cb_yes_no(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    phase, val = parts[2], int(parts[3])
+    data = await state.get_data()
+    if not data.get("folder_id"):
+        await callback.answer("Сессия тугади", show_alert=True)
+        return
+    folder_name = data.get("folder_name", "Папка")
+
+    if phase == "c":
+        await callback.answer()
+        await state.update_data(counted_ok=val)
+        await state.set_state(SubmitState.waiting_location_ok)
+        await callback.message.edit_text(
+            f"📦 <b>{he(folder_name)}</b>\n\nМесто хранения 100% тўғрими?",
+            parse_mode=ParseMode.HTML,
+            reply_markup=inline_yes_no("l"),
+        )
+        return
+
+    if phase == "l":
+        await callback.answer()
+        await state.update_data(location_ok=val)
+        if val == 1:
+            await state.update_data(wrong_location_count=0, fixed_now=None)
+            await state.set_state(SubmitState.waiting_comment)
+            await callback.message.edit_text(
+                f"📦 <b>{he(folder_name)}</b>\n\nИзоҳ ёзинг (- агар йўқ бўлса):",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        await state.set_state(SubmitState.waiting_wrong_location_count)
+        await callback.message.edit_text(
+            f"📦 <b>{he(folder_name)}</b>\n\nНечта жой хато? Рақам юборинг:",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    if phase == "f":
+        await callback.answer()
+        await state.update_data(fixed_now=val)
+        await state.set_state(SubmitState.waiting_comment)
+        await callback.message.edit_text(
+            f"📦 <b>{he(folder_name)}</b>\n\nИзоҳ ёзинг (- агар йўқ бўлса):",
+            parse_mode=ParseMode.HTML,
+        )
+
+
+# ==========================================
 # GLOBAL
 # ==========================================
 @dp.message(F.text == "❌ Бекор қилиш")
@@ -1974,16 +2310,16 @@ async def reimport_command(message: Message):
 async def route_employee_menu(message: Message, state: FSMContext):
     """Меню тугмаси — FSM дан чиқиб, керакли бўлимга ўтadi."""
     text = message.text or ""
-    if text == "📌 Папкаларни белгилаш":
-        return await mark_folders_start(message, state)
-    if text == "📝 Текширув топшириш":
-        return await submit_start(message, state)
+    if text in ("📊 Бугунги иш", "📊 Ҳолатим"):
+        return await dashboard_handler(message, state)
+    if text in ("📝 Санаш", "📝 Текширув топшириш"):
+        return await sanash_handler(message, state)
+    if text in ("📌 Белгилаш", "📌 Папкаларни белгилаш"):
+        return await mark_inline_handler(message, state)
     if text == "📝 Актив текширувларим":
         return await active_checks_handler(message)
     if text in ("📋 Белгиланган папкалар", "📋 Менга берилган папкалар"):
         return await my_folders_handler(message)
-    if text == "📊 Ҳолатим":
-        return await status_handler(message)
     if text == "🔓 Чиқиш":
         return await logout_handler(message, state)
     if text == "❓ Ёрдам":
