@@ -117,8 +117,9 @@ async def send_submission_to_group(
                 counted_folders=counted_folders,
             )
             png = render_report_card_png(card)
-            photo = BufferedInputFile(png, filename="hisobot.png")
-            await bot.send_photo(GROUP_ID, photo)
+            photo = BufferedInputFile(png, filename="tekshiruv.png")
+            caption = f"📦 {folder_name} · {employee_name}"
+            await bot.send_photo(GROUP_ID, photo, caption=caption)
             return "Гуруҳга карточка юборилди."
         except Exception:
             pass  # matn fallback

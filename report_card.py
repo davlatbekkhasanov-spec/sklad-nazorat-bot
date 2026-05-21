@@ -1,4 +1,4 @@
-"""Guruh uchun PNG kartochka — HD, progress fokus, aniq layout."""
+"""Guruh uchun PNG kartochka — aniq shrift, 2x sifat, toza layout."""
 
 from __future__ import annotations
 
@@ -12,14 +12,13 @@ from bot_ui import day_progress_percent, submission_quality_percent
 from time_util import format_submitted_at_display
 
 FONT_DIR = Path(__file__).resolve().parent / "assets" / "fonts"
-OUTPUT_W = 1280
-SCALE = 3
-MARGIN = 48
-ROW_H = 40
-LIST_LINE = 30
+OUTPUT_W = 1200
+SCALE = 2
+MARGIN = 44
+LIST_LINE = 28
 MAX_FOLDER_LINES = 12
-BASE_H = 480
-FOOTER_ZONE = 52
+BASE_H = 500
+FOOTER_ZONE = 56
 
 
 @dataclass
@@ -40,25 +39,25 @@ class ReportCardData:
 
 THEMES = {
     "success": {
-        "bg": (14, 20, 30),
+        "bg": (15, 22, 32),
         "header": (0, 168, 140),
-        "accent": (90, 230, 210),
+        "accent": (80, 220, 200),
         "bar": (0, 200, 170),
-        "title": "Yaxshi ish!",
+        "title": "Текширув · A'lo",
     },
     "warn": {
-        "bg": (26, 14, 12),
+        "bg": (28, 16, 14),
         "header": (220, 110, 40),
-        "accent": (255, 195, 100),
+        "accent": (255, 190, 90),
         "bar": (255, 150, 50),
-        "title": "Diqqat kerak",
+        "title": "Текширув · Diqqat",
     },
     "done": {
-        "bg": (18, 12, 36),
+        "bg": (20, 14, 38),
         "header": (130, 90, 220),
-        "accent": (255, 220, 130),
+        "accent": (255, 215, 120),
         "bar": (170, 120, 255),
-        "title": "Hammasi tayyor!",
+        "title": "Текширув tugadi",
     },
 }
 
@@ -82,15 +81,15 @@ def _card_height(folder_count: int) -> int:
     h = BASE_H
     if folder_count > 0:
         shown = min(folder_count, MAX_FOLDER_LINES)
-        h += 48 + shown * LIST_LINE
+        h += 44 + shown * LIST_LINE
         if folder_count > MAX_FOLDER_LINES:
             h += LIST_LINE
-        h += 24
+        h += 20
     h += FOOTER_ZONE
     return h
 
 
-def _truncate(text: str, limit: int = 48) -> str:
+def _truncate(text: str, limit: int = 46) -> str:
     text = str(text or "").strip()
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
@@ -98,11 +97,13 @@ def _truncate(text: str, limit: int = 48) -> str:
 def _load_fonts(scale: int):
     fallbacks_reg = [
         FONT_DIR / "NotoSans-Regular.ttf",
+        FONT_DIR / "Arial.ttf",
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
         Path("C:/Windows/Fonts/arial.ttf"),
     ]
     fallbacks_bold = [
         FONT_DIR / "NotoSans-Bold.ttf",
+        FONT_DIR / "Arial-Bold.ttf",
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         Path("C:/Windows/Fonts/arialbd.ttf"),
     ]
@@ -110,47 +111,20 @@ def _load_fonts(scale: int):
     bold_path = next((p for p in fallbacks_bold if p.is_file()), None)
     if not reg_path or not bold_path:
         d = ImageFont.load_default()
-        return d, d, d, d, d
+        return d, d, d, d
     return (
-        ImageFont.truetype(str(bold_path), 36 * scale),
-        ImageFont.truetype(str(bold_path), 52 * scale),
-        ImageFont.truetype(str(bold_path), 30 * scale),
-        ImageFont.truetype(str(reg_path), 26 * scale),
-        ImageFont.truetype(str(reg_path), 20 * scale),
+        ImageFont.truetype(str(bold_path), 34 * scale),
+        ImageFont.truetype(str(bold_path), 48 * scale),
+        ImageFont.truetype(str(reg_path), 24 * scale),
+        ImageFont.truetype(str(reg_path), 18 * scale),
     )
-
-
-def _text_h(draw: ImageDraw.ImageDraw, text: str, font) -> int:
-    bbox = draw.textbbox((0, 0), text, font=font)
-    return bbox[3] - bbox[1]
-
-
-def _draw_text_row(
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    y: int,
-    line_h: int,
-    text: str,
-    font,
-    fill: tuple,
-):
-    th = _text_h(draw, text, font)
-    draw.text((x, y + (line_h - th) // 2), text, fill=fill, font=font)
 
 
 def _draw_bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, pct: int, fill: tuple, track: tuple):
     draw.rounded_rectangle((x, y, x + w, y + h), radius=h // 2, fill=track)
     fw = max(0, int(w * max(0, min(100, pct)) / 100))
-    if fw >= 3:
+    if fw >= 2:
         draw.rounded_rectangle((x, y, x + fw, y + h), radius=h // 2, fill=fill)
-
-
-def _draw_progress_ring(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, done: int, total: int, font_main):
-    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=(255, 255, 255), width=5)
-    label = f"{done}/{total}"
-    tw = draw.textlength(label, font=font_main)
-    th = _text_h(draw, label, font_main)
-    draw.text((cx - tw // 2, cy - th // 2), label, fill=(255, 255, 255), font=font_main)
 
 
 def render_report_card(data: ReportCardData, *, theme_key: str | None = None) -> Image.Image:
@@ -161,13 +135,11 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
     W = OUTPUT_W * SCALE
     H = card_h * SCALE
     M = MARGIN * SCALE
-    LH = ROW_H * SCALE
-    LL = LIST_LINE * SCALE
 
-    font_title, font_ring, font_main, font_body, font_small = _load_fonts(SCALE)
-    white = (250, 252, 255)
-    muted = (175, 185, 205)
-    track = (38, 46, 62)
+    font_title, font_big, font_main, font_small = _load_fonts(SCALE)
+    white = (248, 250, 252)
+    muted = (170, 180, 198)
+    track = (35, 42, 58)
 
     img = Image.new("RGB", (W, H), theme["bg"])
     draw = ImageDraw.Draw(img)
@@ -181,131 +153,144 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
     day_pct = day_progress_percent(data.day_done, data.day_total)
     day_left = max(0, data.day_total - data.day_done)
 
-    draw.rounded_rectangle((M, M, W - M, H - M), radius=22 * SCALE, outline=theme["header"], width=4 * SCALE)
+    draw.rounded_rectangle((M, M, W - M, H - M), radius=20 * SCALE, outline=theme["header"], width=3 * SCALE)
 
-    header_h = 96 * SCALE
-    hy1 = M + header_h
-    draw.rounded_rectangle((M + 10 * SCALE, M + 10 * SCALE, W - M - 10 * SCALE, hy1), radius=18 * SCALE, fill=theme["header"])
-    _draw_text_row(draw, M + 28 * SCALE, M + 24 * SCALE, 52 * SCALE, theme["title"], font_title, white)
+    hy1 = M + 88 * SCALE
+    draw.rounded_rectangle((M + 8 * SCALE, M + 8 * SCALE, W - M - 8 * SCALE, hy1), radius=16 * SCALE, fill=theme["header"])
+    draw.text((M + 28 * SCALE, M + 28 * SCALE), theme["title"], fill=white, font=font_title)
 
-    ring_x = W - M - 78 * SCALE
-    ring_y = M + 52 * SCALE
-    _draw_progress_ring(draw, ring_x, ring_y, 42 * SCALE, data.day_done, data.day_total, font_ring)
+    ring_x = W - M - 70 * SCALE
+    ring_y = M + 48 * SCALE
+    ring_r = 38 * SCALE
+    draw.ellipse(
+        (ring_x - ring_r, ring_y - ring_r, ring_x + ring_r, ring_y + ring_r),
+        outline=white,
+        width=4 * SCALE,
+    )
+    pct_txt = str(quality)
+    tw = draw.textlength(pct_txt, font=font_big)
+    draw.text((ring_x - tw // 2, ring_y - 26 * SCALE), pct_txt, fill=white, font=font_big)
+    sub = f"{quality}%"
+    sw = draw.textlength(sub, font=font_small)
+    draw.text((ring_x - sw // 2, ring_y + 14 * SCALE), sub, fill=white, font=font_small)
 
-    y = hy1 + 20 * SCALE
-    _draw_text_row(draw, M + 20 * SCALE, y, LH, _truncate(data.employee_name, 44), font_main, white)
-    y += LH
-    _draw_text_row(draw, M + 20 * SCALE, y, LH, _truncate(data.folder_name, 50), font_body, theme["accent"])
-    y += LH
-    _draw_text_row(draw, M + 20 * SCALE, y, LH - 8 * SCALE, _truncate(data.cycle_title, 55), font_small, muted)
-
+    y = hy1 + 22 * SCALE
+    draw.text((M + 16 * SCALE, y), _truncate(data.employee_name, 42), fill=white, font=font_main)
     y += 36 * SCALE
-    bar_w = W - 2 * M - 40 * SCALE
-    bx = M + 20 * SCALE
-    bar_h = 26 * SCALE
+    draw.text((M + 16 * SCALE, y), _truncate(data.folder_name, 48), fill=theme["accent"], font=font_main)
+    y += 32 * SCALE
+    draw.text((M + 16 * SCALE, y), _truncate(data.cycle_title, 55), fill=muted, font=font_small)
 
-    _draw_text_row(draw, bx, y, LH, "Sifat", font_small, muted)
-    _draw_text_row(draw, bx + bar_w - 90 * SCALE, y, LH, f"{quality}%", font_body, theme["accent"])
-    y += LH
-    _draw_bar(draw, bx, y, bar_w, bar_h, quality, theme["bar"], track)
-    y += LH + 8 * SCALE
+    y += 40 * SCALE
+    bar_w = W - 2 * M - 32 * SCALE
+    bx = M + 16 * SCALE
+    draw.text((bx, y), "Бу текширув", fill=muted, font=font_small)
+    draw.text((bx + bar_w - 80 * SCALE, y), f"{quality}%", fill=theme["accent"], font=font_main)
+    y += 26 * SCALE
+    _draw_bar(draw, bx, y, bar_w, 22 * SCALE, quality, theme["bar"], track)
+    y += 40 * SCALE
 
-    _draw_text_row(draw, bx, y, LH, "Kunlik progress", font_small, muted)
-    prog_lbl = f"{data.day_done} / {data.day_total}"
-    _draw_text_row(draw, bx + bar_w - int(draw.textlength(prog_lbl, font=font_body)) - 4 * SCALE, y, LH, prog_lbl, font_body, theme["accent"])
-    y += LH
-    _draw_bar(draw, bx, y, bar_w, bar_h, day_pct, theme["accent"], track)
-    y += LH + 12 * SCALE
+    draw.text((bx, y), "Кунлик прогресс", fill=muted, font=font_small)
+    draw.text((bx + bar_w - 100 * SCALE, y), f"{data.day_done} / {data.day_total}", fill=theme["accent"], font=font_main)
+    y += 26 * SCALE
+    _draw_bar(draw, bx, y, bar_w, 22 * SCALE, day_pct, theme["accent"], track)
+    y += 42 * SCALE
 
     chips = [
-        f"Sanaldi {data.day_done}",
-        f"Qoldi {day_left}",
-        f"Jami {data.day_total}",
+        f"Саналди {data.day_done}",
+        f"Қолди {day_left}",
+        f"Жами {data.day_total}",
     ]
     cx = bx
-    chip_h = 38 * SCALE
     for label in chips:
-        tw = int(draw.textlength(label, font=font_small)) + 28 * SCALE
-        draw.rounded_rectangle((cx, y, cx + tw, y + chip_h), radius=16 * SCALE, outline=theme["accent"], width=3 * SCALE)
-        _draw_text_row(draw, cx + 14 * SCALE, y, chip_h, label, font_small, theme["accent"])
-        cx += tw + 14 * SCALE
-    y += chip_h + 16 * SCALE
+        tw = int(draw.textlength(label, font=font_small)) + 24 * SCALE
+        draw.rounded_rectangle((cx, y, cx + tw, y + 34 * SCALE), radius=14 * SCALE, outline=theme["accent"], width=2 * SCALE)
+        draw.text((cx + 12 * SCALE, y + 8 * SCALE), label, fill=theme["accent"], font=font_small)
+        cx += tw + 12 * SCALE
 
+    y += 50 * SCALE
     panel_lines = 2 + (1 if not data.location_ok else 0) + (1 if data.comment and data.comment != "-" else 0)
-    panel_h = (20 + panel_lines * ROW_H) * SCALE
+    panel_h = (24 + panel_lines * 34) * SCALE
     draw.rounded_rectangle(
-        (M + 14 * SCALE, y, W - M - 14 * SCALE, y + panel_h),
+        (M + 12 * SCALE, y, W - M - 12 * SCALE, y + panel_h),
         radius=14 * SCALE,
-        fill=(24, 30, 44),
+        fill=(22, 28, 40),
         outline=theme["header"],
-        width=3 * SCALE,
+        width=2 * SCALE,
     )
 
     def yn(ok: int) -> tuple[str, tuple]:
-        return ("Ha", (40, 200, 120)) if ok else ("Yo'q", (240, 90, 90))
+        return ("Ҳа", (30, 90, 55)) if ok else ("Йўқ", (120, 40, 40))
 
-    iy = y + 16 * SCALE
-    for lbl, ok in [("Ostatok", data.counted_ok), ("Joy", data.location_ok)]:
+    iy = y + 20 * SCALE
+    for lbl, ok in [("Остаток", data.counted_ok), ("Жой", data.location_ok)]:
         t, col = yn(ok)
-        _draw_text_row(draw, M + 28 * SCALE, iy, LH, f"{lbl}:", font_small, white)
-        _draw_text_row(draw, M + 160 * SCALE, iy, LH, t, font_body, col)
-        iy += LH
+        draw.text((M + 28 * SCALE, iy), f"{lbl}:", fill=white, font=font_small)
+        draw.text((M + 150 * SCALE, iy), t, fill=col, font=font_main)
+        iy += 34 * SCALE
     if not data.location_ok:
         t, col = yn(1 if data.fixed_now else 0)
-        msg = f"Xato joy: {data.wrong_location_count}  |  Tuzatildi: {t}"
-        _draw_text_row(draw, M + 28 * SCALE, iy, LH, msg, font_small, col)
-        iy += LH
+        draw.text(
+            (M + 28 * SCALE, iy),
+            f"Хато жой: {data.wrong_location_count}  ·  Тузатилди: {t}",
+            fill=col,
+            font=font_small,
+        )
+        iy += 34 * SCALE
     if data.comment and data.comment != "-":
-        _draw_text_row(draw, M + 28 * SCALE, iy, LH, f"Izoh: {_truncate(data.comment, 52)}", font_small, muted)
+        draw.text(
+            (M + 28 * SCALE, iy),
+            f"Изоҳ: {_truncate(data.comment, 50)}",
+            fill=muted,
+            font=font_small,
+        )
 
-    y += panel_h + 20 * SCALE
+    y += panel_h + 24 * SCALE
     content_bottom = y
     if folders:
         shown = folders[-MAX_FOLDER_LINES:]
         hidden = len(folders) - len(shown)
         list_rows = len(shown) + (1 if hidden > 0 else 0)
-        list_h = (44 + list_rows * LIST_LINE) * SCALE
+        list_h = (40 + list_rows * LIST_LINE) * SCALE
         draw.rounded_rectangle(
-            (M + 14 * SCALE, y, W - M - 14 * SCALE, y + list_h),
+            (M + 12 * SCALE, y, W - M - 12 * SCALE, y + list_h),
             radius=14 * SCALE,
-            fill=(24, 30, 44),
+            fill=(22, 28, 40),
             outline=theme["accent"],
-            width=3 * SCALE,
+            width=2 * SCALE,
         )
-        _draw_text_row(draw, M + 28 * SCALE, y + 10 * SCALE, 36 * SCALE, "Sanalgan papkalar", font_small, theme["accent"])
-        ly = y + 48 * SCALE
+        draw.text((M + 28 * SCALE, y + 12 * SCALE), "Саналган папкалар", fill=theme["accent"], font=font_small)
+        ly = y + 40 * SCALE
         current = data.folder_name.strip()
         start_n = len(folders) - len(shown) + 1
         for i, name in enumerate(shown, start=start_n):
             is_new = name.strip() == current and i == len(folders)
-            mark = ">> " if is_new else "   "
-            line = f"{i}.{mark}{_truncate(name, 46)}"
+            mark = "▸ " if is_new else "  "
+            line = f"{i}.{mark}{_truncate(name, 44)}"
             col = theme["accent"] if is_new else muted
-            _draw_text_row(draw, M + 28 * SCALE, ly, LL, line, font_small, col)
-            ly += LL
+            draw.text((M + 28 * SCALE, ly), line, fill=col, font=font_small)
+            ly += LIST_LINE * SCALE
         if hidden > 0:
-            _draw_text_row(draw, M + 28 * SCALE, ly, LL, f"... yana {hidden} ta", font_small, muted)
-            ly += LL
+            draw.text((M + 28 * SCALE, ly), f"… ва яна {hidden} та (юқорида)", fill=muted, font=font_small)
+            ly += LIST_LINE * SCALE
         content_bottom = y + list_h
 
-    footer_y = content_bottom + 24 * SCALE
-    bottom_needed = int(footer_y + 40 * SCALE)
+    footer_y = content_bottom + 20 * SCALE
+    bottom_needed = int(footer_y + 36 * SCALE)
     if bottom_needed > H:
         extended = Image.new("RGB", (W, bottom_needed), theme["bg"])
         extended.paste(img, (0, 0))
         img = extended
         draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle((M, M, W - M, bottom_needed - M), radius=22 * SCALE, outline=theme["header"], width=4 * SCALE)
+        draw.rounded_rectangle((M, M, W - M, bottom_needed - M), radius=20 * SCALE, outline=theme["header"], width=3 * SCALE)
 
-    time_lbl = format_submitted_at_display(data.submitted_at)
-    _draw_text_row(draw, M + 20 * SCALE, footer_y, 36 * SCALE, time_lbl, font_small, muted)
+    draw.text((M + 16 * SCALE, footer_y), format_submitted_at_display(data.submitted_at), fill=muted, font=font_small)
     brand = "SKLAD NAZORAT"
-    bw = int(draw.textlength(brand, font=font_small))
-    _draw_text_row(draw, W - M - 20 * SCALE - bw, footer_y, 36 * SCALE, brand, font_small, theme["header"])
+    bw = draw.textlength(brand, font=font_small)
+    draw.text((W - M - 16 * SCALE - bw, footer_y), brand, fill=theme["header"], font=font_small)
 
-    out_h = max(card_h, int(bottom_needed / SCALE) + 6)
-    cropped = img.crop((0, 0, W, min(bottom_needed, img.height)))
-    return cropped.resize((OUTPUT_W, out_h), Image.Resampling.LANCZOS)
+    out_h = max(card_h, int(bottom_needed / SCALE) + 4)
+    return img.crop((0, 0, W, min(bottom_needed, img.height))).resize((OUTPUT_W, out_h), Image.Resampling.LANCZOS)
 
 
 def build_report_card_data(
@@ -341,6 +326,5 @@ def build_report_card_data(
 
 def render_report_card_png(data: ReportCardData) -> bytes:
     buf = BytesIO()
-    img = render_report_card(data)
-    img.save(buf, format="PNG", compress_level=1, dpi=(144, 144))
+    render_report_card(data).save(buf, format="PNG", compress_level=2)
     return buf.getvalue()

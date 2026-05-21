@@ -174,13 +174,13 @@ def format_submission_group_html(
 
     day_left = max(0, day_total - day_done)
     if quality >= 100 and day_total > 0 and day_left == 0:
-        header = "🎉 <b>Ҳаммаси тайёр — 100%</b>"
+        header = "🎉 <b>ТЕКШИРУВ ТУГАДИ — 100%</b>"
     elif quality >= 100:
-        header = "✅ <b>Яхши иш!</b>"
+        header = "✅ <b>ТЕКШИРУВ — АЪЛО</b>"
     elif quality >= 60:
-        header = "⚠️ <b>Диққат керак</b>"
+        header = "⚠️ <b>ТЕКШИРУВ — ДИҚҚАТ</b>"
     else:
-        header = "❌ <b>Муаммо бор</b>"
+        header = "❌ <b>ТЕКШИРУВ — МУАММО</b>"
 
     lines = [
         header,
@@ -189,10 +189,10 @@ def format_submission_group_html(
         f"📁 <u>{he(folder_name)}</u>",
         f"🗓 <i>{he(cycle_title)}</i>",
         "",
-        f"<b>📊 Сифат</b>",
+        f"<b>📊 Бу текширув</b>",
         f"<code>{q_bar}</code>  <b>{quality}%</b>",
         "",
-        f"<b>📈 Кунлик progress</b>",
+        f"<b>📈 Кунлик юкланиш</b>",
         f"<code>{d_bar}</code>  <b>{day_pct}%</b>",
         f"✅ Саналди: <b>{day_done}</b>  ·  📝 Қолди: <b>{day_left}</b>  ·  📦 Жами: <b>{day_total}</b>",
         "",
