@@ -752,7 +752,8 @@ async def start_handler(message: Message, state: FSMContext):
 
     if is_admin(message.from_user.id):
         await message.answer(
-            f"🔥 Админ режимида кирдингиз.\n\n{startup_import_result}",
+            f"🔥 Админ режимида кирдингиз.\n\n{startup_import_result}\n\n"
+            "📂 Қолган папкалар — менюда ёки /qolgan",
             reply_markup=admin_menu()
         )
         return
@@ -848,14 +849,33 @@ def require_login_or_admin(message: Message) -> bool:
 async def help_handler(message: Message):
     if not is_private(message):
         return
-    await message.answer(
+    text = (
         "Бу бот склад назорати учун.\n\n"
         "• Ходимлар личкада ишлайди\n"
         "• Гуруҳга фақат якунланган ҳисобот кетади\n"
         "• Гуруҳда /hisobot /hodimlar /papkalar /qolgan командалари ишлайди\n"
         "• Админ: 📂 Қолган папкалар — кимда неча ва қайси папка қолган\n"
-        "• Админ ҳисоботни ўчира олади"
+        "• Админ ҳисоботни ўчира олади\n"
+        "• Меню янгиланмаса: /start ёки /menu"
     )
+    markup = admin_menu() if is_admin(message.from_user.id) else None
+    await message.answer(text, reply_markup=markup)
+
+
+@dp.message(Command("menu"))
+async def menu_refresh_handler(message: Message, state: FSMContext):
+    if not is_private(message):
+        return
+    await state.clear()
+    if is_admin(message.from_user.id):
+        return await message.answer(
+            "✅ Админ меню янгиланди.\n📂 Қолган папкалар — шу тугма ёки /qolgan",
+            reply_markup=admin_menu(),
+        )
+    session_emp = get_logged_in_employee(message.from_user.id) or get_employee_by_tg(message.from_user.id)
+    if session_emp:
+        return await message.answer("✅ Меню янгиланди.", reply_markup=employee_menu())
+    await message.answer("Аввал киринг.", reply_markup=login_keyboard())
 
 
 @dp.message(F.text == "📋 Менга берилган папкалар")
