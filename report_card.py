@@ -251,7 +251,7 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         return ("Ҳа", (30, 90, 55)) if ok else ("Йўқ", (120, 40, 40))
 
     iy = y + 20 * SCALE
-    for lbl, ok in [("Остаток", data.counted_ok), ("Жой", data.location_ok)]:
+    for lbl, ok in [("Санаш", data.counted_ok), ("Жой", data.location_ok)]:
         t, col = yn(ok)
         draw.text((M + 28 * SCALE, iy), f"{lbl}:", fill=white, font=font_small)
         draw.text((M + 150 * SCALE, iy), t, fill=col, font=font_main)

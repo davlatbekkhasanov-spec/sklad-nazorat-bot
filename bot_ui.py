@@ -197,7 +197,7 @@ def format_submission_group_html(
         f"✅ Саналди: <b>{day_done}</b>  ·  📝 Қолди: <b>{day_left}</b>  ·  📦 Жами: <b>{day_total}</b>",
         "",
         "┌ <b>Натижа</b> ─────────",
-        f"│ Остаток  {'✅' if counted_ok else '❌'}",
+        f"│ Санаш    {'✅' if counted_ok else '❌'}",
         f"│ Жой      {'✅' if location_ok else '❌'}",
     ]
     if not location_ok:
