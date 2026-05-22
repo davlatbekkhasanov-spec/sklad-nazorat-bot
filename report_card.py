@@ -141,6 +141,31 @@ def _draw_centered_text(
     draw.text((cx - tw // 2 - bbox[0], cy - th // 2 - bbox[1]), text, fill=fill, font=font)
 
 
+def _draw_quality_ring(
+    draw: ImageDraw.ImageDraw,
+    cx: int,
+    cy: int,
+    quality: int,
+    font,
+    fill: tuple,
+    *,
+    scale: int,
+):
+    """Sifat foizi: matn aylana ichida, chiziq matnga tegmaydi."""
+    label = f"{quality}%"
+    pad = 14 * scale
+    bbox = draw.textbbox((0, 0), label, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    ring_r = max(36 * scale, int(max(tw, th) / 2 + pad))
+    draw.ellipse(
+        (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r),
+        outline=fill,
+        width=4 * scale,
+    )
+    _draw_centered_text(draw, cx, cy, label, font, fill)
+
+
 def render_report_card(data: ReportCardData, *, theme_key: str | None = None) -> Image.Image:
     theme_key = theme_key or _pick_theme(data)
     theme = THEMES[theme_key]
@@ -173,15 +198,9 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
     draw.rounded_rectangle((M + 8 * SCALE, M + 8 * SCALE, W - M - 8 * SCALE, hy1), radius=16 * SCALE, fill=theme["header"])
     draw.text((M + 28 * SCALE, M + 28 * SCALE), theme["title"], fill=white, font=font_title)
 
-    ring_x = W - M - 70 * SCALE
+    ring_x = W - M - 72 * SCALE
     ring_y = M + 48 * SCALE
-    ring_r = 38 * SCALE
-    draw.ellipse(
-        (ring_x - ring_r, ring_y - ring_r, ring_x + ring_r, ring_y + ring_r),
-        outline=white,
-        width=4 * SCALE,
-    )
-    _draw_centered_text(draw, ring_x, ring_y, f"{quality}%", font_big, white)
+    _draw_quality_ring(draw, ring_x, ring_y, quality, font_main, white, scale=SCALE)
 
     y = hy1 + 22 * SCALE
     draw.text((M + 16 * SCALE, y), _truncate(data.employee_name, 42), fill=white, font=font_main)
