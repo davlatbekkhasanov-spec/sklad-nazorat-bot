@@ -135,10 +135,8 @@ def _draw_centered_text(
     font,
     fill: tuple,
 ):
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    draw.text((cx - tw // 2 - bbox[0], cy - th // 2 - bbox[1]), text, fill=fill, font=font)
+    # anchor="mm" — matnning vizual markazi (textbbox pastga tushirardi)
+    draw.text((cx, cy), text, fill=fill, font=font, anchor="mm")
 
 
 def _draw_quality_ring(
@@ -158,12 +156,14 @@ def _draw_quality_ring(
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
     ring_r = max(36 * scale, int(max(tw, th) / 2 + pad))
+    stroke = 4 * scale
     draw.ellipse(
         (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r),
         outline=fill,
-        width=4 * scale,
+        width=stroke,
     )
-    _draw_centered_text(draw, cx, cy, label, font, fill)
+    # % belgisi vizual og'irlik pastga tushiradi — ozgina yuqoriga
+    _draw_centered_text(draw, cx, cy - scale, label, font, fill)
 
 
 def render_report_card(data: ReportCardData, *, theme_key: str | None = None) -> Image.Image:
@@ -230,10 +230,11 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         f"Жами {data.day_total}",
     ]
     cx = bx
+    chip_h = 34 * SCALE
     for label in chips:
         tw = int(draw.textlength(label, font=font_small)) + 24 * SCALE
-        draw.rounded_rectangle((cx, y, cx + tw, y + 34 * SCALE), radius=14 * SCALE, outline=theme["accent"], width=2 * SCALE)
-        draw.text((cx + 12 * SCALE, y + 8 * SCALE), label, fill=theme["accent"], font=font_small)
+        draw.rounded_rectangle((cx, y, cx + tw, y + chip_h), radius=14 * SCALE, outline=theme["accent"], width=2 * SCALE)
+        _draw_centered_text(draw, cx + tw // 2, y + chip_h // 2, label, font_small, theme["accent"])
         cx += tw + 12 * SCALE
 
     y += 50 * SCALE
@@ -251,7 +252,7 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         return ("Ҳа", (30, 90, 55)) if ok else ("Йўқ", (120, 40, 40))
 
     iy = y + 20 * SCALE
-    for lbl, ok in [("Санаш", data.counted_ok), ("Жой", data.location_ok)]:
+    for lbl, ok in [("Остаток", data.counted_ok), ("Жой", data.location_ok)]:
         t, col = yn(ok)
         draw.text((M + 28 * SCALE, iy), f"{lbl}:", fill=white, font=font_small)
         draw.text((M + 150 * SCALE, iy), t, fill=col, font=font_main)
