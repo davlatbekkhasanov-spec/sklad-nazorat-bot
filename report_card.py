@@ -127,6 +127,20 @@ def _draw_bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, pct: in
         draw.rounded_rectangle((x, y, x + fw, y + h), radius=h // 2, fill=fill)
 
 
+def _draw_centered_text(
+    draw: ImageDraw.ImageDraw,
+    cx: int,
+    cy: int,
+    text: str,
+    font,
+    fill: tuple,
+):
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    draw.text((cx - tw // 2 - bbox[0], cy - th // 2 - bbox[1]), text, fill=fill, font=font)
+
+
 def render_report_card(data: ReportCardData, *, theme_key: str | None = None) -> Image.Image:
     theme_key = theme_key or _pick_theme(data)
     theme = THEMES[theme_key]
@@ -167,12 +181,7 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         outline=white,
         width=4 * SCALE,
     )
-    pct_txt = str(quality)
-    tw = draw.textlength(pct_txt, font=font_big)
-    draw.text((ring_x - tw // 2, ring_y - 26 * SCALE), pct_txt, fill=white, font=font_big)
-    sub = f"{quality}%"
-    sw = draw.textlength(sub, font=font_small)
-    draw.text((ring_x - sw // 2, ring_y + 14 * SCALE), sub, fill=white, font=font_small)
+    _draw_centered_text(draw, ring_x, ring_y, f"{quality}%", font_big, white)
 
     y = hy1 + 22 * SCALE
     draw.text((M + 16 * SCALE, y), _truncate(data.employee_name, 42), fill=white, font=font_main)
