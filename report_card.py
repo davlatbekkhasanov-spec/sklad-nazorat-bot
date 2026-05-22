@@ -135,10 +135,8 @@ def _draw_centered_text(
     font,
     fill: tuple,
 ):
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    draw.text((cx - tw // 2 - bbox[0], cy - th // 2 - bbox[1]), text, fill=fill, font=font)
+    # anchor="mm" — matnning vizual markazi (textbbox pastga tushirardi)
+    draw.text((cx, cy), text, fill=fill, font=font, anchor="mm")
 
 
 def _draw_quality_ring(
@@ -158,12 +156,14 @@ def _draw_quality_ring(
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
     ring_r = max(36 * scale, int(max(tw, th) / 2 + pad))
+    stroke = 4 * scale
     draw.ellipse(
         (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r),
         outline=fill,
-        width=4 * scale,
+        width=stroke,
     )
-    _draw_centered_text(draw, cx, cy, label, font, fill)
+    # % belgisi vizual og'irlik pastga tushiradi — ozgina yuqoriga
+    _draw_centered_text(draw, cx, cy - scale, label, font, fill)
 
 
 def render_report_card(data: ReportCardData, *, theme_key: str | None = None) -> Image.Image:
