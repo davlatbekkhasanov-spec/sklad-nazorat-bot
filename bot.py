@@ -34,7 +34,6 @@ from bot_ui import (
     inline_yes_no,
 )
 from report_card import build_report_card_data, render_report_card_png
-from hub_test import BTN_HUB_TEST, handle_admin_hub_test
 from yordamchi_push import push_to_yordamchi_hub_background
 
 load_dotenv()
@@ -195,7 +194,6 @@ def admin_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📋 Менга берилган папкалар"), KeyboardButton(text="📝 Актив текширувларим")],
             [KeyboardButton(text="📝 Текширув топшириш"), KeyboardButton(text="📊 Ҳолатим")],
             [KeyboardButton(text="🔓 Чиқиш"), KeyboardButton(text="❓ Ёрдам")],
-            [KeyboardButton(text="🧪 Test (admin)")],
         ],
         resize_keyboard=True
     )
@@ -1195,20 +1193,6 @@ def require_login_or_admin(message: Message) -> bool:
 # ==========================================
 # USER / ADMIN COMMON
 # ==========================================
-@dp.message(Command("test_hub"))
-async def hub_test_cmd(message: Message):
-    if not is_private(message):
-        return
-    await handle_admin_hub_test(message)
-
-
-@dp.message(F.text == BTN_HUB_TEST)
-async def hub_test_btn(message: Message):
-    if not is_private(message):
-        return
-    await handle_admin_hub_test(message)
-
-
 @dp.message(F.text == "❓ Ёрдам")
 async def help_handler(message: Message):
     if not is_private(message):
