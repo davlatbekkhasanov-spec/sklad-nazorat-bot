@@ -34,6 +34,7 @@ from bot_ui import (
     inline_yes_no,
 )
 from report_card import build_report_card_data, render_report_card_png
+from yordamchi_push import push_to_yordamchi_hub_background
 
 load_dotenv()
 
@@ -2106,6 +2107,14 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     )
 
     await state.clear()
+    push_to_yordamchi_hub_background(
+        tg_id=message.from_user.id,
+        bot_key="sklad",
+        summary=(
+            f"Papka {folder_name}: sanaldi {counted_ok}, joy {location_ok}, "
+            f"xato {wrong_location_count}, kun {stats['done']}/{stats['total']}"
+        ),
+    )
     await message.answer(
         f"✅ Ҳисобот қабул қилинди.\n{group_note}",
         reply_markup=employee_menu(),
