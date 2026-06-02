@@ -42,7 +42,10 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 GROUP_ID = int(os.getenv("GROUP_ID", "0"))
 EXCEL_FILE = os.getenv("EXCEL_FILE", "groups.xlsx").strip()
-DB_PATH = os.getenv("DB_PATH", "sklad_bot.db").strip() or "sklad_bot.db"
+DB_PATH = os.getenv("DB_PATH", "/data/sklad_bot.db").strip() or "/data/sklad_bot.db"
+_db_dir = os.path.dirname(DB_PATH)
+if _db_dir:
+    os.makedirs(_db_dir, exist_ok=True)
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN topilmadi. .env faylni tekshiring.")
