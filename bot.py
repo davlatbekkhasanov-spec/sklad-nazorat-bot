@@ -34,7 +34,7 @@ from bot_ui import (
     inline_yes_no,
 )
 from report_card import build_report_card_data, render_report_card_png
-from yordamchi_push import push_to_yordamchi_hub_background
+from yordamchi_push import push_to_yordamchi_hub, push_to_yordamchi_hub_background, today_iso
 
 load_dotenv()
 
@@ -2438,6 +2438,31 @@ async def fallback_handler(message: Message):
 # MAIN
 # ==========================================
 async def main():
+    try:
+        day = today_iso()
+        cursor.execute(
+            """
+            SELECT a.telegram_id AS tg_id,
+                   SUM(s.counted_ok) AS counted_sum
+            FROM submissions s
+            JOIN auth_sessions a ON a.employee_id = s.employee_id
+            WHERE s.submitted_at LIKE ?
+            GROUP BY a.telegram_id
+            """,
+            (f"{day}%",),
+        )
+        for row in cursor.fetchall():
+            tg_id = int(row["tg_id"] or 0)
+            counted = int(row["counted_sum"] or 0)
+            if tg_id and counted > 0:
+                await push_to_yordamchi_hub(
+                    tg_id=tg_id,
+                    bot_key="sklad",
+                    summary=f"Sklad (bugun jami): sanaldi {counted}",
+                    day_iso=day,
+                )
+    except Exception:
+        logging.exception("sklad hub backfill xato")
     bot = Bot(token=BOT_TOKEN)
     await dp.start_polling(bot)
 
