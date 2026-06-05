@@ -13,6 +13,7 @@ OUT_XLSX = ROOT / "groups.xlsx"
 
 FARRUX = "Тувалов Фаррух"
 SINDOR = "Рузибоев Синдор"
+MUSLIMBEK = "Тохиров Муслимбек"
 
 # Qo‘lda ko‘chirishlar: papka → xodim
 MANUAL_TRANSFERS: dict[str, str] = {
@@ -25,6 +26,14 @@ MANUAL_TRANSFERS: dict[str, str] = {
     "Подставки для ручек": SINDOR,  # стаканы для ручек
     "Ручки": SINDOR,  # Pilot va b.
     "Фоторамки": FARRUX,
+    # Чернила ва краскалар → Муслимбек
+    "Акварельные краски": MUSLIMBEK,
+    "Гуашевые краски": MUSLIMBEK,
+    "Краски - подушки (штемпельные)": MUSLIMBEK,
+    "Краски для принтера": MUSLIMBEK,
+    "Чернила для принтеров": MUSLIMBEK,
+    "Тушь и чернила": MUSLIMBEK,
+    "Раскраски": MUSLIMBEK,
 }
 
 # Ражаббоев Пулатнинг папкалари (REDISTRIBUTION.md) — bir martalik
