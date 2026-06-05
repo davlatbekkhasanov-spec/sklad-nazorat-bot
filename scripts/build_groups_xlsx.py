@@ -24,6 +24,7 @@ MANUAL_TRANSFERS: dict[str, str] = {
     "Оснастки для печатей и штампов": SINDOR,  # Trodat
     "Подставки для ручек": SINDOR,  # стаканы для ручек
     "Ручки": SINDOR,  # Pilot va b.
+    "Фоторамки": FARRUX,
 }
 
 # Ражаббоев Пулатнинг папкалари (REDISTRIBUTION.md) — bir martalik
