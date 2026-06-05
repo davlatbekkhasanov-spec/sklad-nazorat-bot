@@ -12,8 +12,21 @@ ASSIGNMENTS = ROOT / "ASSIGNMENTS_CURRENT.txt"
 OUT_XLSX = ROOT / "groups.xlsx"
 
 FARRUX = "Тувалов Фаррух"
+SINDOR = "Рузибоев Синдор"
 
-# Ражаббоев Пулатнинг папкалари (REDISTRIBUTION.md)
+# Qo‘lda ko‘chirishlar: papka → xodim
+MANUAL_TRANSFERS: dict[str, str] = {
+    "Лампы": SINDOR,
+    "Фонари": SINDOR,
+    "LCD-планшеты": SINDOR,
+    "Планшеты для документов": SINDOR,
+    "Планшет для рисования": SINDOR,
+    "Оснастки для печатей и штампов": SINDOR,  # Trodat
+    "Подставки для ручек": SINDOR,  # стаканы для ручек
+    "Ручки": SINDOR,  # Pilot va b.
+}
+
+# Ражаббоев Пулатнинг папкалари (REDISTRIBUTION.md) — bir martalik
 PULAT_FOLDERS: frozenset[str] = frozenset(
     {
         "Батарейки",
@@ -87,12 +100,11 @@ def write_summary(mapping: dict[str, str], path: Path) -> None:
 
 def main() -> None:
     mapping = parse_assignments(ASSIGNMENTS)
-    missing = sorted(PULAT_FOLDERS - set(mapping.keys()))
-    if missing:
-        raise SystemExit(f"Papkalar topilmadi: {missing}")
 
-    for folder in PULAT_FOLDERS:
-        mapping[folder] = FARRUX
+    for folder, emp in MANUAL_TRANSFERS.items():
+        if folder not in mapping:
+            raise SystemExit(f"Ko'chirish: papka topilmadi: {folder}")
+        mapping[folder] = emp
 
     rows = [
         {"Наименование": folder, "Центральный склад": emp}
