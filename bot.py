@@ -57,12 +57,13 @@ if not GROUP_ID:
 
 from employee_registry import (
     CANONICAL_TUVALOV,
-    canonical_employee_name,
+    SKLAD_FARRUX_NAME,
     migrate_sqlite_employee_row,
+    sklad_employee_name,
 )
 
 DEFAULT_PASSWORDS = {
-    CANONICAL_TUVALOV: "431205",
+    "Тувалов Фаррух": "431205",
     "Ядуллаев Умид": "582614",
     "Сагдуллаев Юнус": "764193",
     "Тохиров Муслимбек": "295731",
@@ -658,7 +659,8 @@ def setup_db():
     ensure_default_passwords()
     migrate_sqlite_employee_row(
         cursor,
-        default_password=DEFAULT_PASSWORDS.get(CANONICAL_TUVALOV, "431205"),
+        default_password=DEFAULT_PASSWORDS.get("Тувалов Фаррух")
+        or DEFAULT_PASSWORDS.get(CANONICAL_TUVALOV, "431205"),
         now_iso=now_str(),
     )
     conn.commit()
@@ -763,7 +765,7 @@ def import_from_excel(excel_path: str):
 
     for _, row in df.iterrows():
         folder_name = clean_text(row.get("Наименование"))
-        employee_name = canonical_employee_name(clean_text(row.get("Центральный склад")))
+        employee_name = sklad_employee_name(clean_text(row.get("Центральный склад")))
 
         if not folder_name or not employee_name:
             continue
@@ -828,7 +830,7 @@ def sync_assignments_from_excel(excel_path: str) -> str:
 
     for _, row in df.iterrows():
         folder_name = clean_text(row.get("Наименование"))
-        employee_name = canonical_employee_name(clean_text(row.get("Центральный склад")))
+        employee_name = sklad_employee_name(clean_text(row.get("Центральный склад")))
 
         if not folder_name or not employee_name:
             continue

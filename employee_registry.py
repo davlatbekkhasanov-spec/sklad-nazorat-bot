@@ -137,6 +137,19 @@ def canonical_employee_name(name: str) -> str:
     return raw
 
 
+SKLAD_FARRUX_NAME = "Тувалов Фаррух"
+
+
+def sklad_employee_name(name: str) -> str:
+    """Sklad Excel/DB: Farrux kirill, qolganlari asl ism."""
+    raw = (name or "").strip()
+    if not raw:
+        return raw
+    if is_pulat_legacy(raw) or is_tuvalov_name(raw) or raw == CANONICAL_TUVALOV:
+        return SKLAD_FARRUX_NAME
+    return raw
+
+
 def all_team_tg_ids() -> frozenset[int]:
     return frozenset(TG_EMPLOYEE.keys())
 
@@ -195,7 +208,7 @@ def migrate_sqlite_employee_row(
     if pulat_id and not farrux_id:
         cursor.execute(
             "UPDATE employees SET name = ?, telegram_id = ? WHERE id = ?",
-            (CANONICAL_TUVALOV, TUVALOV_FARRUX_TG_ID, pulat_id),
+            (SKLAD_FARRUX_NAME, TUVALOV_FARRUX_TG_ID, pulat_id),
         )
         return "renamed"
 
@@ -213,7 +226,7 @@ def migrate_sqlite_employee_row(
             INSERT INTO employees (name, role, is_active, created_at, password, telegram_id)
             VALUES (?, 'employee', 1, ?, ?, ?)
             """,
-            (CANONICAL_TUVALOV, now_iso, default_password, TUVALOV_FARRUX_TG_ID),
+            (SKLAD_FARRUX_NAME, now_iso, default_password, TUVALOV_FARRUX_TG_ID),
         )
         return "inserted"
 
