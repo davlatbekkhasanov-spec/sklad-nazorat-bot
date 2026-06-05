@@ -664,9 +664,6 @@ def setup_db():
     conn.commit()
 
 
-setup_db()
-
-
 def get_employee_by_tg(telegram_id: int) -> Optional[sqlite3.Row]:
     cursor.execute("SELECT * FROM employees WHERE telegram_id = ?", (telegram_id,))
     return cursor.fetchone()
@@ -741,6 +738,9 @@ def import_default_employees():
                 (name, now_str(), DEFAULT_PASSWORDS[name])
             )
     conn.commit()
+
+
+setup_db()
 
 
 def import_from_excel(excel_path: str):
