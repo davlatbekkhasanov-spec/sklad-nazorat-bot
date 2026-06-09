@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 import secrets
@@ -24,6 +25,8 @@ from aiogram.types import (
 )
 from dotenv import load_dotenv
 
+from persist_data import bootstrap_persistence, persistence_status_line, resolve_db_path
+
 from bot_ui import (
     FOLDER_PAGE_SIZE,
     build_dashboard_text,
@@ -42,10 +45,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 GROUP_ID = int(os.getenv("GROUP_ID", "0"))
 EXCEL_FILE = os.getenv("EXCEL_FILE", "groups.xlsx").strip()
-DB_PATH = os.getenv("DB_PATH", "/data/sklad_bot.db").strip() or "/data/sklad_bot.db"
-_db_dir = os.path.dirname(DB_PATH)
-if _db_dir:
-    os.makedirs(_db_dir, exist_ok=True)
+_DB_BOOT = bootstrap_persistence(
+    resolve_db_path(default_filename="sklad_bot.db"),
+    legacy_names=("sklad_bot.db",),
+)
+DB_PATH = _DB_BOOT["db_path"]
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN topilmadi. .env faylni tekshiring.")
@@ -2455,6 +2459,7 @@ async def fallback_handler(message: Message):
 # MAIN
 # ==========================================
 async def main():
+    logging.info(persistence_status_line(DB_PATH))
     try:
         day = today_iso()
         cursor.execute(
