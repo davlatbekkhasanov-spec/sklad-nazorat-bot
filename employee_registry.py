@@ -25,7 +25,7 @@ TUVALOV_NAME_KEYS: frozenset[str] = frozenset(
 )
 
 TG_EMPLOYEE: dict[int, str] = {
-    924612402: "Ergashev Ozodbek",
+    7844168817: "Ergashev Ozodbek",
     5412958249: "Ravshanov Oxunjon",
     8547365654: "Ruziboev Sindor",
     6931958983: "Mustafoev Abdullo",
@@ -38,10 +38,10 @@ TG_EMPLOYEE: dict[int, str] = {
 }
 
 EMPLOYEE_NAME_ALIASES: dict[str, int] = {
-    "Ergashev Ozodbek": 924612402,
-    "Ozodbek": 924612402,
-    "Yadullaev Umidjon": 924612402,
-    "Yadullaev Umid": 924612402,
+    "Ergashev Ozodbek": 7844168817,
+    "Ozodbek": 7844168817,
+    "Yadullaev Umidjon": 7844168817,
+    "Yadullaev Umid": 7844168817,
     "Samadov To'lqin": 6001619806,
     "Samadov Tulqin": 6001619806,
     "Ravshanov Oxunjon": 5412958249,
