@@ -68,6 +68,7 @@ from employee_registry import (
 
 DEFAULT_PASSWORDS = {
     "Тувалов Фаррух": "431205",
+    "Ergashev Ozodbek": "582614",
     "Ядуллаев Умид": "582614",
     "Сагдуллаев Юнус": "764193",
     "Тохиров Муслимбек": "295731",
@@ -667,7 +668,31 @@ def setup_db():
         or DEFAULT_PASSWORDS.get(CANONICAL_TUVALOV, "431205"),
         now_iso=now_str(),
     )
+    _migrate_ozodbek_telegram(cursor)
     conn.commit()
+
+
+def _migrate_ozodbek_telegram(cursor) -> None:
+    """Yadullaev eski TG (924612402) → Ergashev Ozodbek (7844168817)."""
+    oz_tg = 7844168817
+    old_tg = 924612402
+    canon = "Ergashev Ozodbek"
+    legacy_names = (
+        "Ядуллаев Умид",
+        "Yadullaev Umid",
+        "Yadullaev Umidjon",
+        "Yadullaev Umid",
+    )
+    cursor.execute("UPDATE employees SET telegram_id = NULL WHERE telegram_id = ?", (old_tg,))
+    for old in legacy_names:
+        cursor.execute(
+            "UPDATE employees SET name = ?, telegram_id = ? WHERE name = ?",
+            (canon, oz_tg, old),
+        )
+    cursor.execute(
+        "UPDATE employees SET telegram_id = ? WHERE name = ? AND telegram_id IS NULL",
+        (oz_tg, canon),
+    )
 
 
 def get_employee_by_tg(telegram_id: int) -> Optional[sqlite3.Row]:
