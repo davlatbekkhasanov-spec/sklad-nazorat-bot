@@ -69,7 +69,6 @@ from employee_registry import (
 DEFAULT_PASSWORDS = {
     "Тувалов Фаррух": "431205",
     "Ergashev Ozodbek": "582614",
-    "Ядуллаев Умид": "582614",
     "Сагдуллаев Юнус": "764193",
     "Тохиров Муслимбек": "295731",
     "Равшанов Зиёдулло": "816452",
@@ -673,7 +672,7 @@ def setup_db():
 
 
 def _migrate_ozodbek_telegram(cursor) -> None:
-    """Yadullaev eski TG (924612402) → Ergashev Ozodbek (7844168817)."""
+    """Yadullaev eski TG (924612402) → Ergashev Ozodbek (7844168817). UNIQUE xatosiz."""
     oz_tg = 7844168817
     old_tg = 924612402
     canon = "Ergashev Ozodbek"
@@ -682,17 +681,38 @@ def _migrate_ozodbek_telegram(cursor) -> None:
         "Yadullaev Umid",
         "Yadullaev Umidjon",
         "Yadullaev Umid",
+        canon,
     )
+
     cursor.execute("UPDATE employees SET telegram_id = NULL WHERE telegram_id = ?", (old_tg,))
+
+    target_id = None
     for old in legacy_names:
-        cursor.execute(
-            "UPDATE employees SET name = ?, telegram_id = ? WHERE name = ?",
-            (canon, oz_tg, old),
-        )
+        cursor.execute("SELECT id FROM employees WHERE name = ? LIMIT 1", (old,))
+        row = cursor.fetchone()
+        if row:
+            target_id = int(row["id"])
+            break
+
+    if target_id is None:
+        return
+
     cursor.execute(
-        "UPDATE employees SET telegram_id = ? WHERE name = ? AND telegram_id IS NULL",
-        (oz_tg, canon),
+        "UPDATE employees SET telegram_id = NULL WHERE telegram_id = ? AND id != ?",
+        (oz_tg, target_id),
     )
+    cursor.execute(
+        "UPDATE employees SET name = ?, telegram_id = ? WHERE id = ?",
+        (canon, oz_tg, target_id),
+    )
+
+    for old in legacy_names:
+        if old == canon:
+            continue
+        cursor.execute(
+            "UPDATE employees SET is_active = 0, telegram_id = NULL WHERE name = ? AND id != ?",
+            (old, target_id),
+        )
 
 
 def get_employee_by_tg(telegram_id: int) -> Optional[sqlite3.Row]:
