@@ -668,7 +668,55 @@ def setup_db():
         now_iso=now_str(),
     )
     _migrate_ozodbek_telegram(cursor)
+    _migrate_ozodbek_assignments(cursor)
     conn.commit()
+
+
+def _migrate_ozodbek_assignments(cursor) -> int:
+    """Umid/Yadullaev papkalarini Ergashev Ozodbek ga ko'chirish."""
+    from employee_registry import SKLAD_OZODBek_NAME
+
+    canon = SKLAD_OZODBek_NAME
+    legacy_names = (
+        "Ядуллаев Умид",
+        "Yadullaev Umid",
+        "Yadullaev Umidjon",
+        "Ядуллаев Умиджон",
+    )
+
+    cursor.execute("SELECT id FROM employees WHERE name = ? AND is_active = 1 LIMIT 1", (canon,))
+    oz_row = cursor.fetchone()
+    if not oz_row:
+        return 0
+    oz_id = int(oz_row["id"])
+
+    moved = 0
+    for old_name in legacy_names:
+        cursor.execute(
+            "SELECT id FROM employees WHERE name = ? AND id != ?",
+            (old_name, oz_id),
+        )
+        for row in cursor.fetchall():
+            old_id = int(row["id"])
+            cursor.execute(
+                """
+                DELETE FROM assignments
+                WHERE employee_id = ? AND folder_id IN (
+                    SELECT folder_id FROM assignments WHERE employee_id = ?
+                )
+                """,
+                (old_id, oz_id),
+            )
+            cursor.execute(
+                "UPDATE assignments SET employee_id = ? WHERE employee_id = ?",
+                (oz_id, old_id),
+            )
+            moved += cursor.rowcount
+            cursor.execute(
+                "UPDATE employees SET is_active = 0, telegram_id = NULL WHERE id = ?",
+                (old_id,),
+            )
+    return moved
 
 
 def _migrate_ozodbek_telegram(cursor) -> None:

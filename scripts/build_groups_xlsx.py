@@ -12,6 +12,7 @@ ASSIGNMENTS = ROOT / "ASSIGNMENTS_CURRENT.txt"
 OUT_XLSX = ROOT / "groups.xlsx"
 
 FARRUX = "Тувалов Фаррух"
+OZODBek = "Ergashev Ozodbek"
 SINDOR = "Рузибоев Синдор"
 MUSLIMBEK = "Тохиров Муслимбек"
 RAVSHANOV = "Равшанов Зиёдулло"
@@ -76,10 +77,14 @@ def parse_assignments(path: Path) -> dict[str, str]:
     text = path.read_text(encoding="utf-8")
     mapping: dict[str, str] = {}
     employee: str | None = None
+    rename_emp = {
+        "Ядуллаев Умид": OZODBek,
+        "Yadullaev Umid": OZODBek,
+    }
     for line in text.splitlines():
         m_emp = re.match(r"^(.+?) — \d+ ta papka", line.strip())
         if m_emp:
-            employee = m_emp.group(1).strip()
+            employee = rename_emp.get(m_emp.group(1).strip(), m_emp.group(1).strip())
             continue
         m_folder = re.match(r"^\s+\d+\.\s+(.+)$", line)
         if m_folder and employee:

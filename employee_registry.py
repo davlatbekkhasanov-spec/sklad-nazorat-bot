@@ -140,13 +140,28 @@ def canonical_employee_name(name: str) -> str:
 
 
 SKLAD_FARRUX_NAME = "Тувалов Фаррух"
+SKLAD_OZODBek_NAME = "Ergashev Ozodbek"
+
+UMID_LEGACY_KEYS: frozenset[str] = frozenset(
+    {
+        "yadullaev umid",
+        "yadullaev umidjon",
+        "ядуллаев умид",
+        "ядуллаев умиджон",
+        "umid",
+        "ozodbek",
+        "ergashev ozodbek",
+    }
+)
 
 
 def sklad_employee_name(name: str) -> str:
-    """Sklad Excel/DB: Farrux kirill, qolganlari asl ism."""
+    """Sklad Excel/DB: Farrux kirill; Umid/Yadullaev → Ozodbek; qolganlari asl ism."""
     raw = (name or "").strip()
     if not raw:
         return raw
+    if _alias_key(raw) in UMID_LEGACY_KEYS or raw == SKLAD_OZODBek_NAME:
+        return SKLAD_OZODBek_NAME
     if is_pulat_legacy(raw) or is_tuvalov_name(raw) or raw == CANONICAL_TUVALOV:
         return SKLAD_FARRUX_NAME
     return raw
