@@ -9,6 +9,8 @@ import sys
 from aiogram import Bot
 from dotenv import load_dotenv
 
+from telegram_polling_guard import ensure_polling_mode
+
 load_dotenv()
 
 
@@ -19,15 +21,11 @@ async def main() -> None:
         sys.exit(1)
     bot = Bot(token=token)
     try:
-        me = await bot.get_me()
         wh = await bot.get_webhook_info()
-        print(f"Bot: @{me.username} (id={me.id})")
+        had = bool(wh.url)
         print(f"Webhook: {wh.url or '(yoq)'}")
-        if wh.url:
-            await bot.delete_webhook(drop_pending_updates=True)
-            print("Webhook o'chirildi.")
-        else:
-            print("Webhook allaqachon yo'q.")
+        await ensure_polling_mode(bot)
+        print("Webhook o'chirildi." if had else "Webhook allaqachon yo'q.")
     finally:
         await bot.session.close()
 

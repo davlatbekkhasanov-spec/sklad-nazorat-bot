@@ -2578,15 +2578,10 @@ async def main():
                 )
     except Exception:
         logging.exception("sklad hub backfill xato")
+    from telegram_polling_guard import ensure_polling_mode
+
     bot = Bot(token=BOT_TOKEN)
-    me = await bot.get_me()
-    logging.info("Sklad bot: @%s (id=%s)", me.username, me.id)
-    wh = await bot.get_webhook_info()
-    if wh.url:
-        logging.warning("Webhook topildi (%s) — o'chirilmoqda (BOT-MARKET/konstruktor)", wh.url)
-        await bot.delete_webhook(drop_pending_updates=True)
-    else:
-        logging.info("Webhook yo'q — polling rejimi")
+    await ensure_polling_mode(bot)
     await dp.start_polling(bot, drop_pending_updates=True)
 
 
