@@ -1,2 +1,6 @@
 [phases.setup]
+nixPkgs = ["python312"]
 aptPkgs = ["fonts-dejavu-core"]
+
+[start]
+cmd = "python bot.py"

@@ -1,0 +1,6 @@
+# Railway Railpack: GitHub attestations ba'zan ishlamaydi
+[tools]
+python = "3.12.8"
+
+[settings]
+python.github_attestations = false
