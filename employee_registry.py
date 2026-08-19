@@ -1,31 +1,69 @@
-"""Barcha botlar uchun yagona xodim → Telegram ID (Tuvalov Farrux / Pulat migratsiya)."""
+"""Barcha botlar uchun yagona xodim → Telegram ID."""
 
 from __future__ import annotations
 
 import re
 
-TUVALOV_FARRUX_TG_ID = 7703650930
-CANONICAL_TUVALOV = "Tuvalov Farrux"
+PULAT_TG_ID = 7987730795
+CANONICAL_PULAT = "Rajabboev Pulat"
+SHOXIJAXON_TG_ID = 6706402440
+CANONICAL_SHOXIJAXON = "Ibodullaev Shoxijaxon"
 
-PULAT_LEGACY_NAMES: frozenset[str] = frozenset(
+# Eski importlar (botlar ichidagi backward compat)
+TUVALOV_FARRUX_TG_ID = PULAT_TG_ID
+CANONICAL_TUVALOV = CANONICAL_PULAT
+OZODBEK_TG_ID = SHOXIJAXON_TG_ID
+CANONICAL_OZODBEK = CANONICAL_SHOXIJAXON
+
+TUVALOV_LEGACY_NAMES: frozenset[str] = frozenset(
+    {
+        "tuvalov farrux",
+        "тувалов фаррух",
+        "тувалов farrux",
+        "фаррух",
+        "farrux",
+    }
+)
+
+PULAT_NAME_KEYS: frozenset[str] = frozenset(
     {
         "rajabboev pulat",
         "rahabboev pulat",
         "ражаббоев пулат",
         "рахаббоев пулат",
+        "pulat",
     }
 )
 
-TUVALOV_NAME_KEYS: frozenset[str] = frozenset(
+OZODBEK_LEGACY_NAMES: frozenset[str] = frozenset(
     {
-        "tuvalov farrux",
-        "тувалов фаррух",
-        "фаррух",
+        "ergashev ozodbek",
+        "ozodbek",
+        "эргашев",
+        "yadullaev umid",
+        "yadullaev umidjon",
+        "ядуллаев умид",
+        "ядуллаев умиджон",
+        "umid",
+        "umidjon",
     }
 )
+
+SHOXIJAXON_NAME_KEYS: frozenset[str] = frozenset(
+    {
+        "ibodullaev shoxijaxon",
+        "ibodullaev shohijaxon",
+        "шохижахон",
+        "ибодуллаев шохижахон",
+        "shoxijaxon",
+        "shohijaxon",
+    }
+)
+
+PULAT_LEGACY_NAMES = PULAT_NAME_KEYS
 
 TG_EMPLOYEE: dict[int, str] = {
-    7844168817: "Ergashev Ozodbek",
+    SHOXIJAXON_TG_ID: CANONICAL_SHOXIJAXON,
     5412958249: "Ravshanov Oxunjon",
     8547365654: "Ruziboev Sindor",
     6931958983: "Mustafoev Abdullo",
@@ -34,14 +72,16 @@ TG_EMPLOYEE: dict[int, str] = {
     6001619806: "Samadov Tulqin",
     5732350707: "Toxirov Muslimbek",
     8440127425: "Ravshanov Ziyodullo",
-    TUVALOV_FARRUX_TG_ID: CANONICAL_TUVALOV,
+    PULAT_TG_ID: CANONICAL_PULAT,
 }
 
 EMPLOYEE_NAME_ALIASES: dict[str, int] = {
-    "Ergashev Ozodbek": 7844168817,
-    "Ozodbek": 7844168817,
-    "Yadullaev Umidjon": 7844168817,
-    "Yadullaev Umid": 7844168817,
+    CANONICAL_SHOXIJAXON: SHOXIJAXON_TG_ID,
+    "Ibodullaev Shohijaxon": SHOXIJAXON_TG_ID,
+    "Ergashev Ozodbek": SHOXIJAXON_TG_ID,
+    "Ozodbek": SHOXIJAXON_TG_ID,
+    "Yadullaev Umidjon": SHOXIJAXON_TG_ID,
+    "Yadullaev Umid": SHOXIJAXON_TG_ID,
     "Samadov To'lqin": 6001619806,
     "Samadov Tulqin": 6001619806,
     "Ravshanov Oxunjon": 5412958249,
@@ -59,16 +99,15 @@ EMPLOYEE_NAME_ALIASES: dict[str, int] = {
     "Толиб Шерназаров": 5465963344,
     "Sagdullaev Yunus": 6991673998,
     "Sagdullaev": 6991673998,
-    CANONICAL_TUVALOV: TUVALOV_FARRUX_TG_ID,
-    "Тувалов Фаррух": TUVALOV_FARRUX_TG_ID,
-    "Тувалов Farrux": TUVALOV_FARRUX_TG_ID,
-    "Rajabboev Pulat": TUVALOV_FARRUX_TG_ID,
-    "Rahabboev Pulat": TUVALOV_FARRUX_TG_ID,
-    "Ражаббоев Пулат": TUVALOV_FARRUX_TG_ID,
-    "Рахаббоев Пулат": TUVALOV_FARRUX_TG_ID,
+    CANONICAL_PULAT: PULAT_TG_ID,
+    "Rahabboev Pulat": PULAT_TG_ID,
+    "Ражаббоев Пулат": PULAT_TG_ID,
+    "Рахаббоев Пулат": PULAT_TG_ID,
+    "Tuvalov Farrux": PULAT_TG_ID,
+    "Тувалов Фаррух": PULAT_TG_ID,
+    "Тувалов Farrux": PULAT_TG_ID,
 }
 
-# Guruh kartalari (qisqa ismlar)
 SHORT_NAME_ALIASES: dict[str, str] = {
     "охунжон": "Ravshanov Oxunjon",
     "oxunjon": "Ravshanov Oxunjon",
@@ -92,23 +131,42 @@ SHORT_NAME_ALIASES: dict[str, str] = {
     "to'lqin": "Samadov To'lqin",
     "sagdullaev": "Sagdullaev Yunus",
     "yunus": "Sagdullaev Yunus",
-    "tuvalov farrux": CANONICAL_TUVALOV,
-    "farrux": CANONICAL_TUVALOV,
-    "тувалов фаррух": CANONICAL_TUVALOV,
-    "rajabboev pulat": CANONICAL_TUVALOV,
+    "shoxijaxon": CANONICAL_SHOXIJAXON,
+    "shohijaxon": CANONICAL_SHOXIJAXON,
+    "ozodbek": CANONICAL_SHOXIJAXON,
+    "эргашев": CANONICAL_SHOXIJAXON,
+    "pulat": CANONICAL_PULAT,
+    "rajabboev pulat": CANONICAL_PULAT,
+    "rahabboev pulat": CANONICAL_PULAT,
+    "tuvalov farrux": CANONICAL_PULAT,
+    "farrux": CANONICAL_PULAT,
+    "тувалов фаррух": CANONICAL_PULAT,
 }
 
 PULAT_DISPLAY_NAMES: tuple[str, ...] = (
-    "Rajabboev Pulat",
+    CANONICAL_PULAT,
     "Rahabboev Pulat",
     "Ражаббоев Пулат",
     "Рахаббоев Пулат",
 )
 
 TUVALOV_DISPLAY_NAMES: tuple[str, ...] = (
-    CANONICAL_TUVALOV,
+    "Tuvalov Farrux",
     "Тувалов Фаррух",
     "Тувалов Farrux",
+)
+
+SHOXIJAXON_DISPLAY_NAMES: tuple[str, ...] = (
+    CANONICAL_SHOXIJAXON,
+    "Ibodullaev Shohijaxon",
+)
+
+OZODBEK_DISPLAY_NAMES: tuple[str, ...] = (
+    "Ergashev Ozodbek",
+    "Ядуллаев Умид",
+    "Yadullaev Umid",
+    "Yadullaev Umidjon",
+    "Ядуллаев Умиджон",
 )
 
 
@@ -120,27 +178,51 @@ def _alias_key(raw: str) -> str:
     return " ".join(s.split())
 
 
+def is_tuvalov_legacy(name: str) -> bool:
+    return _alias_key(name) in TUVALOV_LEGACY_NAMES
+
+
+def is_pulat_name(name: str) -> bool:
+    key = _alias_key(name)
+    return key in PULAT_NAME_KEYS or name.strip() == CANONICAL_PULAT
+
+
 def is_pulat_legacy(name: str) -> bool:
-    return _alias_key(name) in PULAT_LEGACY_NAMES
+    return is_pulat_name(name)
 
 
 def is_tuvalov_name(name: str) -> bool:
+    return is_tuvalov_legacy(name) or is_pulat_name(name)
+
+
+def is_ozodbek_legacy(name: str) -> bool:
+    return _alias_key(name) in OZODBEK_LEGACY_NAMES
+
+
+def is_umid_legacy(name: str) -> bool:
+    return is_ozodbek_legacy(name)
+
+
+def is_shoxijaxon_name(name: str) -> bool:
     key = _alias_key(name)
-    return key in TUVALOV_NAME_KEYS or name.strip() == CANONICAL_TUVALOV
+    return key in SHOXIJAXON_NAME_KEYS or name.strip() == CANONICAL_SHOXIJAXON
 
 
 def canonical_employee_name(name: str) -> str:
-    """Pulat → Tuvalov; Farrux allaqachon bo'lsa o'zgartirmaydi."""
     raw = (name or "").strip()
     if not raw:
         return raw
-    if is_pulat_legacy(raw) or is_tuvalov_name(raw):
-        return CANONICAL_TUVALOV
+    if is_tuvalov_legacy(raw) or is_pulat_name(raw):
+        return CANONICAL_PULAT
+    if is_ozodbek_legacy(raw) or is_shoxijaxon_name(raw):
+        return CANONICAL_SHOXIJAXON
     return raw
 
 
-SKLAD_FARRUX_NAME = "Тувалов Фаррух"
-SKLAD_OZODBek_NAME = "Ergashev Ozodbek"
+SKLAD_PULAT_NAME = "Ражаббоев Пулат"
+SKLAD_SHOXIJAXON_NAME = "Ibodullaev Shoxijaxon"
+SKLAD_FARRUX_NAME = SKLAD_PULAT_NAME
+SKLAD_OZODBek_NAME = SKLAD_SHOXIJAXON_NAME
 
 UMID_LEGACY_KEYS: frozenset[str] = frozenset(
     {
@@ -151,19 +233,21 @@ UMID_LEGACY_KEYS: frozenset[str] = frozenset(
         "umid",
         "ozodbek",
         "ergashev ozodbek",
+        "ibodullaev shoxijaxon",
+        "shoxijaxon",
     }
 )
 
 
 def sklad_employee_name(name: str) -> str:
-    """Sklad Excel/DB: Farrux kirill; Umid/Yadullaev → Ozodbek; qolganlari asl ism."""
+    """Sklad Excel/DB: legacy → joriy kanonik ism."""
     raw = (name or "").strip()
     if not raw:
         return raw
-    if _alias_key(raw) in UMID_LEGACY_KEYS or raw == SKLAD_OZODBek_NAME:
-        return SKLAD_OZODBek_NAME
-    if is_pulat_legacy(raw) or is_tuvalov_name(raw) or raw == CANONICAL_TUVALOV:
-        return SKLAD_FARRUX_NAME
+    if _alias_key(raw) in UMID_LEGACY_KEYS or raw in OZODBEK_DISPLAY_NAMES + SHOXIJAXON_DISPLAY_NAMES:
+        return SKLAD_SHOXIJAXON_NAME
+    if is_tuvalov_legacy(raw) or is_pulat_name(raw) or raw in TUVALOV_DISPLAY_NAMES + PULAT_DISPLAY_NAMES:
+        return SKLAD_PULAT_NAME
     return raw
 
 
@@ -176,7 +260,6 @@ def operator_display_name(tg_id: int) -> str:
 
 
 def resolve_employee_tg_id(name: str) -> int | None:
-    """Ism → tg_id (alias + Pulat→Tuvalov)."""
     raw = (name or "").strip()
     if not raw:
         return None
@@ -202,64 +285,61 @@ def migrate_sqlite_employee_row(
     default_password: str | None = None,
     now_iso: str = "",
 ) -> str:
-    """
-    Sklad DB: Pulat nomi → Tuvalov Farrux; Farrux bo'lsa tegmaydi.
-    Qaytaradi: 'renamed' | 'inserted' | 'deactivated_pulat' | 'ok'.
-    """
-    farrux_id = None
-    for nm in TUVALOV_DISPLAY_NAMES:
-        cursor.execute("SELECT id FROM employees WHERE name = ?", (nm,))
-        row = cursor.fetchone()
-        if row:
-            farrux_id = int(row["id"])
-            break
-
     pulat_id = None
-    for nm in PULAT_DISPLAY_NAMES:
+    for nm in PULAT_DISPLAY_NAMES + TUVALOV_DISPLAY_NAMES:
         cursor.execute("SELECT id FROM employees WHERE name = ?", (nm,))
         row = cursor.fetchone()
         if row:
             pulat_id = int(row["id"])
             break
 
-    if pulat_id and not farrux_id:
+    legacy_id = None
+    for nm in TUVALOV_DISPLAY_NAMES:
+        cursor.execute("SELECT id FROM employees WHERE name = ? AND id != ?", (nm, pulat_id or -1))
+        row = cursor.fetchone()
+        if row:
+            legacy_id = int(row["id"])
+            break
+
+    if legacy_id and not pulat_id:
         cursor.execute(
             "UPDATE employees SET name = ?, telegram_id = ? WHERE id = ?",
-            (SKLAD_FARRUX_NAME, TUVALOV_FARRUX_TG_ID, pulat_id),
+            (SKLAD_PULAT_NAME, PULAT_TG_ID, legacy_id),
         )
         return "renamed"
 
-    if pulat_id and farrux_id and pulat_id != farrux_id:
-        cursor.execute("UPDATE employees SET is_active = 0 WHERE id = ?", (pulat_id,))
+    if legacy_id and pulat_id and legacy_id != pulat_id:
+        cursor.execute("UPDATE employees SET is_active = 0 WHERE id = ?", (legacy_id,))
         cursor.execute(
-            "UPDATE employees SET telegram_id = ? WHERE id = ?",
-            (TUVALOV_FARRUX_TG_ID, farrux_id),
+            "UPDATE employees SET name = ?, telegram_id = ? WHERE id = ?",
+            (SKLAD_PULAT_NAME, PULAT_TG_ID, pulat_id),
         )
-        return "deactivated_pulat"
+        return "deactivated_legacy"
 
-    if not farrux_id and default_password is not None:
+    if not pulat_id and default_password is not None:
         cursor.execute(
             """
             INSERT INTO employees (name, role, is_active, created_at, password, telegram_id)
             VALUES (?, 'employee', 1, ?, ?, ?)
             """,
-            (SKLAD_FARRUX_NAME, now_iso, default_password, TUVALOV_FARRUX_TG_ID),
+            (SKLAD_PULAT_NAME, now_iso, default_password, PULAT_TG_ID),
         )
         return "inserted"
 
-    if farrux_id:
+    if pulat_id:
         cursor.execute(
-            "UPDATE employees SET telegram_id = ? WHERE id = ?",
-            (TUVALOV_FARRUX_TG_ID, farrux_id),
+            "UPDATE employees SET name = ?, telegram_id = ? WHERE id = ?",
+            (SKLAD_PULAT_NAME, PULAT_TG_ID, pulat_id),
         )
     return "ok"
 
 
 def build_employee_tg_ids_dict() -> dict[str, int]:
-    """Ishxona va boshqa botlar uchun: ko'rsatish ismi → tg_id."""
     out: dict[str, int] = {}
-    for display in TUVALOV_DISPLAY_NAMES + PULAT_DISPLAY_NAMES:
-        out[display] = TUVALOV_FARRUX_TG_ID
+    for display in PULAT_DISPLAY_NAMES + TUVALOV_DISPLAY_NAMES:
+        out[display] = PULAT_TG_ID
+    for display in SHOXIJAXON_DISPLAY_NAMES + OZODBEK_DISPLAY_NAMES:
+        out[display] = SHOXIJAXON_TG_ID
     for alias, tid in EMPLOYEE_NAME_ALIASES.items():
         out[alias] = int(tid)
     for tid, emp in TG_EMPLOYEE.items():

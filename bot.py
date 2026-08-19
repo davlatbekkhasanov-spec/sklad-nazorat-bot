@@ -60,15 +60,16 @@ if not GROUP_ID:
 
 
 from employee_registry import (
-    CANONICAL_TUVALOV,
-    SKLAD_FARRUX_NAME,
+    CANONICAL_PULAT,
+    SHOXIJAXON_TG_ID,
+    SKLAD_PULAT_NAME,
     migrate_sqlite_employee_row,
     sklad_employee_name,
 )
 
 DEFAULT_PASSWORDS = {
-    "Тувалов Фаррух": "431205",
-    "Ergashev Ozodbek": "582614",
+    "Ражаббоев Пулат": "431205",
+    "Ibodullaev Shoxijaxon": "582614",
     "Сагдуллаев Юнус": "764193",
     "Тохиров Муслимбек": "295731",
     "Равшанов Зиёдулло": "816452",
@@ -663,20 +664,20 @@ def setup_db():
     ensure_default_passwords()
     migrate_sqlite_employee_row(
         cursor,
-        default_password=DEFAULT_PASSWORDS.get("Тувалов Фаррух")
-        or DEFAULT_PASSWORDS.get(CANONICAL_TUVALOV, "431205"),
+        default_password=DEFAULT_PASSWORDS.get("Ражаббоев Пулат")
+        or DEFAULT_PASSWORDS.get(CANONICAL_PULAT, "431205"),
         now_iso=now_str(),
     )
-    _migrate_ozodbek_telegram(cursor)
-    _migrate_ozodbek_assignments(cursor)
+    _migrate_shoxijaxon_telegram(cursor)
+    _migrate_shoxijaxon_assignments(cursor)
     conn.commit()
 
 
-def _migrate_ozodbek_assignments(cursor) -> int:
-    """Umid/Yadullaev papkalarini Ergashev Ozodbek ga ko'chirish."""
-    from employee_registry import SKLAD_OZODBek_NAME
+def _migrate_shoxijaxon_assignments(cursor) -> int:
+    """Umid/Yadullaev/Ozodbek papkalarini Ibodullaev Shoxijaxon ga ko'chirish."""
+    from employee_registry import SKLAD_SHOXIJAXON_NAME
 
-    canon = SKLAD_OZODBek_NAME
+    canon = SKLAD_SHOXIJAXON_NAME
     legacy_names = (
         "Ядуллаев Умид",
         "Yadullaev Umid",
@@ -719,20 +720,22 @@ def _migrate_ozodbek_assignments(cursor) -> int:
     return moved
 
 
-def _migrate_ozodbek_telegram(cursor) -> None:
-    """Yadullaev eski TG (924612402) → Ergashev Ozodbek (7844168817). UNIQUE xatosiz."""
-    oz_tg = 7844168817
-    old_tg = 924612402
-    canon = "Ergashev Ozodbek"
+def _migrate_shoxijaxon_telegram(cursor) -> None:
+    """Eski TG (924612402, 7844168817) → Ibodullaev Shoxijaxon (6706402440)."""
+    new_tg = 6706402440
+    old_tgs = (924612402, 7844168817)
+    canon = "Ibodullaev Shoxijaxon"
     legacy_names = (
         "Ядуллаев Умид",
         "Yadullaev Umid",
         "Yadullaev Umidjon",
-        "Yadullaev Umid",
+        "Ergashev Ozodbek",
+        "Ibodullaev Shoxijaxon",
         canon,
     )
 
-    cursor.execute("UPDATE employees SET telegram_id = NULL WHERE telegram_id = ?", (old_tg,))
+    for old_tg in old_tgs:
+        cursor.execute("UPDATE employees SET telegram_id = NULL WHERE telegram_id = ?", (old_tg,))
 
     target_id = None
     for old in legacy_names:
@@ -747,11 +750,11 @@ def _migrate_ozodbek_telegram(cursor) -> None:
 
     cursor.execute(
         "UPDATE employees SET telegram_id = NULL WHERE telegram_id = ? AND id != ?",
-        (oz_tg, target_id),
+        (new_tg, target_id),
     )
     cursor.execute(
         "UPDATE employees SET name = ?, telegram_id = ? WHERE id = ?",
-        (canon, oz_tg, target_id),
+        (canon, new_tg, target_id),
     )
 
     for old in legacy_names:

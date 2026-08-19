@@ -1,4 +1,4 @@
-"""ASSIGNMENTS_CURRENT.txt → groups.xlsx (Пулат папкалари → Тувалов Фаррух)."""
+"""ASSIGNMENTS_CURRENT.txt → groups.xlsx (Pulat / Shoxijaxon)."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSIGNMENTS = ROOT / "ASSIGNMENTS_CURRENT.txt"
 OUT_XLSX = ROOT / "groups.xlsx"
 
-FARRUX = "Тувалов Фаррух"
-OZODBek = "Ergashev Ozodbek"
+FARRUX = "Ражаббоев Пулат"
+PULAT = FARRUX
+OZODBek = "Ibodullaev Shoxijaxon"
+SHOXIJAXON = OZODBek
 SINDOR = "Рузибоев Синдор"
 MUSLIMBEK = "Тохиров Муслимбек"
 RAVSHANOV = "Равшанов Зиёдулло"
