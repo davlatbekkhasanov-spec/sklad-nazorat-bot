@@ -1,21 +1,21 @@
 # Papkalar qayta taqsimoti
 
-**2026-06:** Ражаббоев Пулат ўрнига **Тувалов Фаррух** (28 ta papka — Пулатнинг аввалги рўйхати).
+**2026-08:** **Rajabboev Pulat** va **Ibodullaev Shoxijaxon** — joriy xodimlar (eski Tuvalov / Yadullaev nomlari bekor).
 
-**Сагдуллаев Юнус** — 1 ta papka олиб ташланган (ҳозир папка йўқ).
+**Sagdullaev Yunus** — 1 ta papka olib tashlangan (hozir papka yo'q).
 
 ## Joriy jami (`groups.xlsx`)
 
-| Ходим | Papka |
+| Xodim | Papka |
 |--------|-------|
-| Тувалов Фаррух | 28 |
-| Ядуллаев Умид | 20 |
-| Равшанов Зиёдулло | 22 |
-| Рузибоев Синдор | 52 |
-| Тохиров Муслимбек | 28 |
-| Мустафоев Абдулло | 28 |
-| **Жами** | **178** |
+| Rajabboev Pulat | 28 |
+| Ibodullaev Shoxijaxon | 17 |
+| Ravshanov Ziyodullo | 22 |
+| Ruziboev Sindor | 52 |
+| Toxirov Muslimbek | 28 |
+| Mustafoev Abdullo | 28 |
+| **Jami** | **175** |
 
-**Синдорга ўтказилди (8 ta):** Лампы, Фонари, LCD-планшеты, Планшеты для документов, Планшет для рисования, Оснастки (Trodat), Подставки для ручек, Ручки (Pilot).
+**Sindorga o'tkazildi (8 ta):** Lampy, Fonari, LCD-planshety, Planshety dlya dokumentov, Planshet dlya risovaniya, Osmastki (Trodat), Podstavki dlya ruchek, Ruchki (Pilot).
 
 Excel yangilash: `python scripts/build_groups_xlsx.py`
