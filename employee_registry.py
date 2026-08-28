@@ -8,6 +8,7 @@ PULAT_TG_ID = 7987730795
 CANONICAL_PULAT = "Rajabboev Pulat"
 SHOXIJAXON_TG_ID = 6706402440
 CANONICAL_SHOXIJAXON = "Ibodullaev Shoxijaxon"
+OXUNJON_TG_ID = 8663341753
 
 # Eski importlar (botlar ichidagi backward compat)
 TUVALOV_FARRUX_TG_ID = PULAT_TG_ID
@@ -64,7 +65,7 @@ PULAT_LEGACY_NAMES = PULAT_NAME_KEYS
 
 TG_EMPLOYEE: dict[int, str] = {
     SHOXIJAXON_TG_ID: CANONICAL_SHOXIJAXON,
-    5412958249: "Ravshanov Oxunjon",
+    OXUNJON_TG_ID: "Ravshanov Oxunjon",
     8547365654: "Ruziboev Sindor",
     6931958983: "Mustafoev Abdullo",
     6991673998: "Sagdullaev Yunus",
@@ -84,9 +85,9 @@ EMPLOYEE_NAME_ALIASES: dict[str, int] = {
     "Yadullaev Umid": SHOXIJAXON_TG_ID,
     "Samadov To'lqin": 6001619806,
     "Samadov Tulqin": 6001619806,
-    "Ravshanov Oxunjon": 5412958249,
-    "Oxunjon": 5412958249,
-    "Охунжон": 5412958249,
+    "Ravshanov Oxunjon": OXUNJON_TG_ID,
+    "Oxunjon": OXUNJON_TG_ID,
+    "Охунжон": OXUNJON_TG_ID,
     "Ravshanov Ziyodullo": 8440127425,
     "Ravshanov_Z_": 8440127425,
     "Mustafoev Abdullo": 6931958983,
