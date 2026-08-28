@@ -94,21 +94,44 @@ def _send_sync(payload: dict, day: str, tg_id: int, bot_key: str, summary: str) 
 
 
 async def push_to_yordamchi_hub(
-    *, tg_id: int, bot_key: str, summary: str, day_iso: str | None = None
+    *,
+    tg_id: int,
+    bot_key: str,
+    summary: str = "",
+    day_iso: str | None = None,
+    event_type: str = "",
+    user_name: str = "",
+    activity_type: str = "",
+    status: str = "",
+    metadata: dict | None = None,
 ) -> tuple[bool, str]:
     text = " ".join(str(summary or "").split())
-    if not text or not tg_id:
-        return False, "tg_id yoki matn yo'q"
+    et = str(event_type or "").strip().lower()
+    if not tg_id:
+        return False, "tg_id yo'q"
+    if not text and not et:
+        return False, "matn yoki event_type kerak"
     day = day_iso or today_iso()
-    payload = {
+    payload: dict = {
         "tg_id": int(tg_id),
         "bot_key": str(bot_key or "").strip().lower(),
-        "summary": text[:420],
         "day": day,
     }
+    if text:
+        payload["summary"] = text[:420]
+    if et:
+        payload["event_type"] = et
+    if user_name:
+        payload["user_name"] = str(user_name).strip()[:80]
+    if activity_type:
+        payload["activity_type"] = str(activity_type).strip().lower()[:32]
+    if status:
+        payload["status"] = str(status).strip().lower()[:16]
+    if metadata:
+        payload["metadata"] = metadata
 
     def _run() -> tuple[bool, str]:
-        return _send_sync(payload, day, int(tg_id), payload["bot_key"], payload["summary"])
+        return _send_sync(payload, day, int(tg_id), payload["bot_key"], payload.get("summary", ""))
 
     try:
         return await asyncio.to_thread(_run)
@@ -120,5 +143,53 @@ async def push_to_yordamchi_hub(
 def push_to_yordamchi_hub_background(**kwargs) -> None:
     try:
         asyncio.get_running_loop().create_task(push_to_yordamchi_hub(**kwargs))
+    except RuntimeError:
+        pass
+
+
+async def push_session_start(
+    *,
+    tg_id: int,
+    bot_key: str,
+    user_name: str = "",
+    activity_type: str = "",
+    status: str = "active",
+    metadata: dict | None = None,
+) -> tuple[bool, str]:
+    return await push_to_yordamchi_hub(
+        tg_id=tg_id,
+        bot_key=bot_key,
+        event_type="session_start",
+        user_name=user_name,
+        activity_type=activity_type,
+        status=status,
+        metadata=dict(metadata or {}),
+    )
+
+
+async def push_session_end(
+    *,
+    tg_id: int,
+    bot_key: str,
+    activity_type: str = "",
+) -> tuple[bool, str]:
+    return await push_to_yordamchi_hub(
+        tg_id=tg_id,
+        bot_key=bot_key,
+        event_type="session_end",
+        activity_type=activity_type,
+    )
+
+
+def push_session_start_background(**kwargs) -> None:
+    try:
+        asyncio.get_running_loop().create_task(push_session_start(**kwargs))
+    except RuntimeError:
+        pass
+
+
+def push_session_end_background(**kwargs) -> None:
+    try:
+        asyncio.get_running_loop().create_task(push_session_end(**kwargs))
     except RuntimeError:
         pass

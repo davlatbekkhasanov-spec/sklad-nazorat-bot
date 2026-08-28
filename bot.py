@@ -37,7 +37,13 @@ from bot_ui import (
     inline_yes_no,
 )
 from report_card import build_report_card_data, render_report_card_png
-from yordamchi_push import push_to_yordamchi_hub, push_to_yordamchi_hub_background, today_iso
+from yordamchi_push import (
+    push_session_end_background,
+    push_session_start_background,
+    push_to_yordamchi_hub,
+    push_to_yordamchi_hub_background,
+    today_iso,
+)
 
 load_dotenv()
 
@@ -2112,6 +2118,14 @@ async def submit_get_folder(message: Message, state: FSMContext):
 
     await state.update_data(folder_id=folder["id"], folder_name=folder["name"])
     await state.set_state(SubmitState.waiting_counted_ok)
+    stats = employee_work_stats(employee["id"], cycle["id"])
+    push_session_start_background(
+        tg_id=message.from_user.id,
+        bot_key="sklad",
+        user_name=employee["name"],
+        activity_type="sklad",
+        metadata={"folder": folder["name"], "done": stats["done"], "total": stats["total"]},
+    )
     await message.answer(
         f"Папка: {folder['name']}\n\nОстаток 100% тўғри саналдими?",
         reply_markup=yes_no_keyboard()
@@ -2227,6 +2241,7 @@ async def submit_comment(message: Message, state: FSMContext, bot: Bot):
     )
 
     await state.clear()
+    push_session_end_background(tg_id=message.from_user.id, bot_key="sklad", activity_type="sklad")
     push_to_yordamchi_hub_background(
         tg_id=message.from_user.id,
         bot_key="sklad",
@@ -2434,6 +2449,14 @@ async def cb_pick_folder_submit(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(folder_id=folder["id"], folder_name=folder["name"])
     await state.set_state(SubmitState.waiting_counted_ok)
+    stats = employee_work_stats(employee["id"], cycle["id"])
+    push_session_start_background(
+        tg_id=callback.from_user.id,
+        bot_key="sklad",
+        user_name=employee["name"],
+        activity_type="sklad",
+        metadata={"folder": folder["name"], "done": stats["done"], "total": stats["total"]},
+    )
     await callback.message.edit_text(
         f"📦 <b>{he(folder['name'])}</b>\n\nОстаток 100% тўғри саналдими?",
         parse_mode=ParseMode.HTML,
