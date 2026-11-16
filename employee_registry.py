@@ -6,15 +6,79 @@ import re
 
 PULAT_TG_ID = 7987730795
 CANONICAL_PULAT = "Rajabboev Pulat"
-SHOXIJAXON_TG_ID = 6706402440
+SHOXIJAXON_TG_ID = 8922128075
 CANONICAL_SHOXIJAXON = "Ibodullaev Shoxijaxon"
 OXUNJON_TG_ID = 8663341753
+SINDOR_LEGACY_TG_ID = 8547365654
+DILNOZA_TG_ID = 1174833646
+CANONICAL_DILNOZA = "Azatova Dilnoza"
+
+ABDULLO_TG_ID = 6931958983
+CANONICAL_ABDULLO = "Mustafoev Abdullo"
+DIYORBEK_LEGACY_TG_ID = 5603088321
+ABDULLO_LEGACY_TG_ID = ABDULLO_TG_ID
+DIYORBEK_TG_ID = ABDULLO_TG_ID
+CANONICAL_DIYORBEK = CANONICAL_ABDULLO
+DAURBEK_TG_ID = 1800401851
+CANONICAL_DAURBEK = "Anvarov Daurbek"
+TULQIN_LEGACY_TG_ID = 6001619806
 
 # Eski importlar (botlar ichidagi backward compat)
 TUVALOV_FARRUX_TG_ID = PULAT_TG_ID
 CANONICAL_TUVALOV = CANONICAL_PULAT
 OZODBEK_TG_ID = SHOXIJAXON_TG_ID
 CANONICAL_OZODBEK = CANONICAL_SHOXIJAXON
+
+# Eski Telegram akkauntlar → joriy ID (Shoxijaxon yangi: 8922128075)
+LEGACY_TG_ID_MAP: dict[int, int] = {
+    6706402440: SHOXIJAXON_TG_ID,
+    924612402: SHOXIJAXON_TG_ID,
+    7844168817: SHOXIJAXON_TG_ID,
+    7703650930: PULAT_TG_ID,
+    5412958249: OXUNJON_TG_ID,
+    8547365654: DILNOZA_TG_ID,
+    5603088321: ABDULLO_TG_ID,
+    6001619806: DAURBEK_TG_ID,
+}
+
+
+def canonical_tg_id(telegram_id: int | None) -> int | None:
+    if telegram_id is None:
+        return None
+    u = int(telegram_id)
+    return LEGACY_TG_ID_MAP.get(u, u)
+
+
+def tg_id_lookup_variants(telegram_id: int | None) -> frozenset[int]:
+    """Bir xodimning barcha Telegram ID lari (eski + joriy)."""
+    if telegram_id is None:
+        return frozenset()
+    u = int(telegram_id)
+    canon = canonical_tg_id(u)
+    ids: set[int] = {u}
+    if canon is not None:
+        ids.add(int(canon))
+    for old, new in LEGACY_TG_ID_MAP.items():
+        if u in (old, new) or canon in (old, new):
+            ids.add(int(old))
+            ids.add(int(new))
+    return frozenset(ids)
+
+
+def same_telegram_person(stored_id: int | None, user_id: int | None) -> bool:
+    if stored_id is None or user_id is None:
+        return stored_id is user_id
+    return int(stored_id) in tg_id_lookup_variants(user_id)
+
+
+def is_registered_team_member(telegram_id: int | None) -> bool:
+    if telegram_id is None:
+        return False
+    u = int(telegram_id)
+    if u in TG_EMPLOYEE or u in LEGACY_TG_ID_MAP:
+        return True
+    return canonical_tg_id(u) in TG_EMPLOYEE
+
 
 TUVALOV_LEGACY_NAMES: frozenset[str] = frozenset(
     {
@@ -61,16 +125,58 @@ SHOXIJAXON_NAME_KEYS: frozenset[str] = frozenset(
     }
 )
 
+ABDULLO_LEGACY_NAMES: frozenset[str] = frozenset(
+    {
+        "mustafoev abdullo",
+        "abdullo mustafoev",
+        "abdullo mustafoyev",
+        "mustafoyev abdullo",
+        "abdullo",
+        "мустаfoev abdullo",
+        "мустаfoев абдулло",
+        "абдулло",
+    }
+)
+
+DIYORBEK_NAME_KEYS: frozenset[str] = frozenset(
+    {
+        "zaynitdinov diyorbek",
+        "diyorbek",
+        "зайнетдинов дiyorbek",
+        "дiyorbek",
+    }
+)
+
 PULAT_LEGACY_NAMES = PULAT_NAME_KEYS
+
+SINDOR_LEGACY_NAMES: frozenset[str] = frozenset(
+    {
+        "ruziboev sindor",
+        "ruziboev sindorbek",
+        "sindorbek",
+        "sindor",
+        "рузибоев синдор",
+        "рузибоев синдорбек",
+    }
+)
+
+DILNOZA_NAME_KEYS: frozenset[str] = frozenset(
+    {
+        "azatova dilnoza",
+        "dilnoza",
+        "азатова дилноза",
+        "дилноза",
+    }
+)
 
 TG_EMPLOYEE: dict[int, str] = {
     SHOXIJAXON_TG_ID: CANONICAL_SHOXIJAXON,
     OXUNJON_TG_ID: "Ravshanov Oxunjon",
-    8547365654: "Ruziboev Sindor",
-    6931958983: "Mustafoev Abdullo",
+    DILNOZA_TG_ID: CANONICAL_DILNOZA,
+    ABDULLO_TG_ID: CANONICAL_ABDULLO,
     6991673998: "Sagdullaev Yunus",
     5465963344: "Shernazarov Tolib",
-    6001619806: "Samadov Tulqin",
+    DAURBEK_TG_ID: CANONICAL_DAURBEK,
     5732350707: "Toxirov Muslimbek",
     8440127425: "Ravshanov Ziyodullo",
     PULAT_TG_ID: CANONICAL_PULAT,
@@ -83,17 +189,22 @@ EMPLOYEE_NAME_ALIASES: dict[str, int] = {
     "Ozodbek": SHOXIJAXON_TG_ID,
     "Yadullaev Umidjon": SHOXIJAXON_TG_ID,
     "Yadullaev Umid": SHOXIJAXON_TG_ID,
-    "Samadov To'lqin": 6001619806,
-    "Samadov Tulqin": 6001619806,
+    CANONICAL_DAURBEK: DAURBEK_TG_ID,
+    "Anvarov Daurbek": DAURBEK_TG_ID,
+    "Samadov To'lqin": DAURBEK_TG_ID,
+    "Samadov Tulqin": DAURBEK_TG_ID,
     "Ravshanov Oxunjon": OXUNJON_TG_ID,
     "Oxunjon": OXUNJON_TG_ID,
     "Охунжон": OXUNJON_TG_ID,
     "Ravshanov Ziyodullo": 8440127425,
     "Ravshanov_Z_": 8440127425,
-    "Mustafoev Abdullo": 6931958983,
-    "Abdullo Mustafoyev": 6931958983,
-    "Ruziboev Sindor": 8547365654,
-    "Ruziboev sindorbek": 8547365654,
+    CANONICAL_ABDULLO: ABDULLO_TG_ID,
+    "Mustafoev Abdullo": ABDULLO_TG_ID,
+    "Abdullo Mustafoyev": ABDULLO_TG_ID,
+    "Zaynitdinov Diyorbek": ABDULLO_TG_ID,
+    CANONICAL_DILNOZA: DILNOZA_TG_ID,
+    "Ruziboev Sindor": DILNOZA_TG_ID,
+    "Ruziboev sindorbek": DILNOZA_TG_ID,
     "Toxirov Muslimbek": 5732350707,
     "Тохиров Муслимбек": 5732350707,
     "Shernazarov Tolib": 5465963344,
@@ -116,20 +227,29 @@ SHORT_NAME_ALIASES: dict[str, str] = {
     "ravshanov_z_": "Ravshanov Ziyodullo",
     "ravshanov z": "Ravshanov Ziyodullo",
     "ziyodullo": "Ravshanov Ziyodullo",
-    "abdullo mustafoyev": "Mustafoev Abdullo",
-    "mustafoyev abdullo": "Mustafoev Abdullo",
-    "mustafoev abdullo": "Mustafoev Abdullo",
-    "ruziboev sindorbek": "Ruziboev Sindor",
-    "sindorbek": "Ruziboev Sindor",
+    "abdullo mustafoyev": CANONICAL_ABDULLO,
+    "mustafoyev abdullo": CANONICAL_ABDULLO,
+    "mustafoev abdullo": CANONICAL_ABDULLO,
+    "abdullo": CANONICAL_ABDULLO,
+    "diyorbek": CANONICAL_ABDULLO,
+    "zaynitdinov diyorbek": CANONICAL_ABDULLO,
+    "ruziboev sindorbek": CANONICAL_DILNOZA,
+    "sindorbek": CANONICAL_DILNOZA,
+    "sindor": CANONICAL_DILNOZA,
+    "dilnoza": CANONICAL_DILNOZA,
+    "azatova dilnoza": CANONICAL_DILNOZA,
     "тохиров муслимбек": "Toxirov Muslimbek",
     "toxirov muslimbek": "Toxirov Muslimbek",
     "толиб шерназаров": "Shernazarov Tolib",
     "shernazarov tolib": "Shernazarov Tolib",
     "толиб": "Shernazarov Tolib",
     "tolib": "Shernazarov Tolib",
-    "samadov tolqin": "Samadov To'lqin",
-    "samadov to'lqin": "Samadov To'lqin",
-    "to'lqin": "Samadov To'lqin",
+    "samadov tolqin": CANONICAL_DAURBEK,
+    "samadov to'lqin": CANONICAL_DAURBEK,
+    "to'lqin": CANONICAL_DAURBEK,
+    "anvarov daurbek": CANONICAL_DAURBEK,
+    "daurbek": CANONICAL_DAURBEK,
+    "даврбек": CANONICAL_DAURBEK,
     "sagdullaev": "Sagdullaev Yunus",
     "yunus": "Sagdullaev Yunus",
     "shoxijaxon": CANONICAL_SHOXIJAXON,
@@ -171,6 +291,15 @@ OZODBEK_DISPLAY_NAMES: tuple[str, ...] = (
 )
 
 
+def is_abdullo_legacy(name: str) -> bool:
+    return _alias_key(name) in ABDULLO_LEGACY_NAMES
+
+
+def is_diyorbek_name(name: str) -> bool:
+    key = _alias_key(name)
+    return key in DIYORBEK_NAME_KEYS or name.strip() == CANONICAL_DIYORBEK
+
+
 def _alias_key(raw: str) -> str:
     s = (raw or "").strip().lower()
     for ch in ("õ", "ö", "ó", "ô", "'", "'", "`", "ʻ", "ʼ", "’"):
@@ -209,10 +338,23 @@ def is_shoxijaxon_name(name: str) -> bool:
     return key in SHOXIJAXON_NAME_KEYS or name.strip() == CANONICAL_SHOXIJAXON
 
 
+def is_sindor_legacy(name: str) -> bool:
+    return _alias_key(name) in SINDOR_LEGACY_NAMES
+
+
+def is_dilnoza_name(name: str) -> bool:
+    key = _alias_key(name)
+    return key in DILNOZA_NAME_KEYS or name.strip() == CANONICAL_DILNOZA
+
+
 def canonical_employee_name(name: str) -> str:
     raw = (name or "").strip()
     if not raw:
         return raw
+    if is_sindor_legacy(raw) or is_dilnoza_name(raw):
+        return CANONICAL_DILNOZA
+    if is_abdullo_legacy(raw) or is_diyorbek_name(raw):
+        return CANONICAL_DIYORBEK
     if is_tuvalov_legacy(raw) or is_pulat_name(raw):
         return CANONICAL_PULAT
     if is_ozodbek_legacy(raw) or is_shoxijaxon_name(raw):
@@ -253,11 +395,17 @@ def sklad_employee_name(name: str) -> str:
 
 
 def all_team_tg_ids() -> frozenset[int]:
-    return frozenset(TG_EMPLOYEE.keys())
+    return frozenset(TG_EMPLOYEE.keys()) | frozenset(LEGACY_TG_ID_MAP.keys())
 
 
 def operator_display_name(tg_id: int) -> str:
-    return TG_EMPLOYEE.get(int(tg_id), f"ID {tg_id}")
+    u = int(tg_id)
+    if u in TG_EMPLOYEE:
+        return TG_EMPLOYEE[u]
+    canon = canonical_tg_id(u)
+    if canon and canon in TG_EMPLOYEE:
+        return TG_EMPLOYEE[canon]
+    return f"ID {tg_id}"
 
 
 def resolve_employee_tg_id(name: str) -> int | None:

@@ -1,4 +1,4 @@
-"""Telegram inline UI — dashboard, sahifalash, callback tugmalar."""
+"""Telegram inline UI — dashboard, пагинация, callback-кнопки."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def submission_quality_percent(
     wrong_location_count: int,
     fixed_now,
 ) -> int:
-    """Бу текширув натижаси: 0–100% (остаток + жой + тўғирлаш)."""
+    """Результат этой проверки: 0–100% (остаток + место + исправление)."""
     if counted_ok and location_ok:
         return 100
     score = 0
@@ -63,7 +63,7 @@ def truncate_label(name: str, limit: int = 36) -> str:
 
 
 def inline_cancel_row() -> list[list[InlineKeyboardButton]]:
-    return [[InlineKeyboardButton(text="❌ Бекор", callback_data="ui:x")]]
+    return [[InlineKeyboardButton(text="❌ Отмена", callback_data="ui:x")]]
 
 
 def inline_yes_no(prefix: str) -> InlineKeyboardMarkup:
@@ -71,8 +71,8 @@ def inline_yes_no(prefix: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Ҳа", callback_data=f"ui:y:{prefix}:1"),
-                InlineKeyboardButton(text="❌ Йўқ", callback_data=f"ui:y:{prefix}:0"),
+                InlineKeyboardButton(text="✅ Да", callback_data=f"ui:y:{prefix}:1"),
+                InlineKeyboardButton(text="❌ Нет", callback_data=f"ui:y:{prefix}:0"),
             ],
             *inline_cancel_row(),
         ]
@@ -86,7 +86,7 @@ def folder_list_keyboard(
     *,
     show_mark_all: bool = False,
 ) -> InlineKeyboardMarkup:
-    """pick_prefix: p (sanash) yoki m (belgilash)"""
+    """pick_prefix: p (пересчёт) или m (отметка)"""
     start = page * FOLDER_PAGE_SIZE
     chunk = rows[start : start + FOLDER_PAGE_SIZE]
     buttons: list[list[InlineKeyboardButton]] = []
@@ -107,11 +107,11 @@ def folder_list_keyboard(
     if nav:
         buttons.append(nav)
     if show_mark_all:
-        buttons.append([InlineKeyboardButton(text="✅ Ҳаммасини тайёр деб белгилаш", callback_data="ui:m:all")])
+        buttons.append([InlineKeyboardButton(text="✅ Отметить все как готовые", callback_data="ui:m:all")])
     buttons.append(
         [
-            InlineKeyboardButton(text="🔄 Янгилаш", callback_data="ui:go:dash"),
-            InlineKeyboardButton(text="❌ Бекор", callback_data="ui:x"),
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="ui:go:dash"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="ui:x"),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -120,9 +120,9 @@ def folder_list_keyboard(
 def dashboard_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Санаш", callback_data="ui:go:submit")],
-            [InlineKeyboardButton(text="📌 Тайёр деб белгилаш (ихтиёрий)", callback_data="ui:go:mark")],
-            [InlineKeyboardButton(text="🔄 Янгилаш", callback_data="ui:go:dash")],
+            [InlineKeyboardButton(text="📝 Пересчёт", callback_data="ui:go:submit")],
+            [InlineKeyboardButton(text="📌 Отметить как готовые (необязательно)", callback_data="ui:go:mark")],
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="ui:go:dash")],
         ]
     )
 
@@ -138,12 +138,12 @@ def build_dashboard_text(
     today = today_display()
     bar = progress_bar(done, total)
     return (
-        f"<b>📊 Бугунги иш</b>\n"
+        f"<b>📊 Работа сегодня</b>\n"
         f"<i>{he(today)}</i> · {he(cycle_title)}\n\n"
         f"👤 <b>{he(employee_name)}</b>\n"
         f"<code>{bar}</code>  <b>{done}</b> / {total}\n\n"
-        f"📝 Санаш керак: <b>{to_sanash}</b>\n"
-        f"✅ Тайёр (саналган): <b>{done}</b>"
+        f"📝 Нужен пересчёт: <b>{to_sanash}</b>\n"
+        f"✅ Готово (пересчитано): <b>{done}</b>"
     )
 
 
@@ -174,13 +174,13 @@ def format_submission_group_html(
 
     day_left = max(0, day_total - day_done)
     if quality >= 100 and day_total > 0 and day_left == 0:
-        header = "🎉 <b>ТЕКШИРУВ ТУГАДИ — 100%</b>"
+        header = "🎉 <b>ПРОВЕРКА ЗАВЕРШЕНА — 100%</b>"
     elif quality >= 100:
-        header = "✅ <b>ТЕКШИРУВ — АЪЛО</b>"
+        header = "✅ <b>ПРОВЕРКА — ОТЛИЧНО</b>"
     elif quality >= 60:
-        header = "⚠️ <b>ТЕКШИРУВ — ДИҚҚАТ</b>"
+        header = "⚠️ <b>ПРОВЕРКА — ВНИМАНИЕ</b>"
     else:
-        header = "❌ <b>ТЕКШИРУВ — МУАММО</b>"
+        header = "❌ <b>ПРОВЕРКА — ПРОБЛЕМА</b>"
 
     lines = [
         header,
@@ -189,20 +189,20 @@ def format_submission_group_html(
         f"📁 <u>{he(folder_name)}</u>",
         f"🗓 <i>{he(cycle_title)}</i>",
         "",
-        f"<b>📊 Бу текширув</b>",
+        f"<b>📊 Эта проверка</b>",
         f"<code>{q_bar}</code>  <b>{quality}%</b>",
         "",
-        f"<b>📈 Кунлик юкланиш</b>",
+        f"<b>📈 Дневная загрузка</b>",
         f"<code>{d_bar}</code>  <b>{day_pct}%</b>",
-        f"✅ Саналди: <b>{day_done}</b>  ·  📝 Қолди: <b>{day_left}</b>  ·  📦 Жами: <b>{day_total}</b>",
+        f"✅ Пересчитано: <b>{day_done}</b>  ·  📝 Осталось: <b>{day_left}</b>  ·  📦 Всего: <b>{day_total}</b>",
         "",
-        "┌ <b>Натижа</b> ─────────",
+        "┌ <b>Результат</b> ─────────",
         f"│ Остаток  {'✅' if counted_ok else '❌'}",
-        f"│ Жой      {'✅' if location_ok else '❌'}",
+        f"│ Место    {'✅' if location_ok else '❌'}",
     ]
     if not location_ok:
-        lines.append(f"│ Хато жой <b>{wrong_location_count}</b> та")
-        lines.append(f"│ Тўғирланди {'✅' if fixed_now else '❌'}")
+        lines.append(f"│ Ошибочных мест <b>{wrong_location_count}</b>")
+        lines.append(f"│ Исправлено {'✅' if fixed_now else '❌'}")
     lines.append("└────────────────")
 
     if comment and comment != "-":
