@@ -43,21 +43,21 @@ THEMES = {
         "header": (0, 168, 140),
         "accent": (80, 220, 200),
         "bar": (0, 200, 170),
-        "title": "Текширув",
+        "title": "Проверка",
     },
     "warn": {
         "bg": (28, 16, 14),
         "header": (220, 110, 40),
         "accent": (255, 190, 90),
         "bar": (255, 150, 50),
-        "title": "Текширув · Diqqat",
+        "title": "Проверка · Внимание",
     },
     "done": {
         "bg": (20, 14, 38),
         "header": (130, 90, 220),
         "accent": (255, 215, 120),
         "bar": (170, 120, 255),
-        "title": "Текширув tugadi",
+        "title": "Проверка завершена",
     },
 }
 
@@ -212,22 +212,22 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
     y += 40 * SCALE
     bar_w = W - 2 * M - 32 * SCALE
     bx = M + 16 * SCALE
-    draw.text((bx, y), "Бу текширув", fill=muted, font=font_small)
+    draw.text((bx, y), "Эта проверка", fill=muted, font=font_small)
     draw.text((bx + bar_w - 80 * SCALE, y), f"{quality}%", fill=theme["accent"], font=font_main)
     y += 26 * SCALE
     _draw_bar(draw, bx, y, bar_w, 22 * SCALE, quality, theme["bar"], track)
     y += 40 * SCALE
 
-    draw.text((bx, y), "Кунлик прогресс", fill=muted, font=font_small)
+    draw.text((bx, y), "Дневной прогресс", fill=muted, font=font_small)
     draw.text((bx + bar_w - 100 * SCALE, y), f"{data.day_done} / {data.day_total}", fill=theme["accent"], font=font_main)
     y += 26 * SCALE
     _draw_bar(draw, bx, y, bar_w, 22 * SCALE, day_pct, theme["accent"], track)
     y += 42 * SCALE
 
     chips = [
-        f"Саналди {data.day_done}",
-        f"Қолди {day_left}",
-        f"Жами {data.day_total}",
+        f"Пересчитано {data.day_done}",
+        f"Осталось {day_left}",
+        f"Всего {data.day_total}",
     ]
     cx = bx
     chip_h = 34 * SCALE
@@ -249,10 +249,10 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
     )
 
     def yn(ok: int) -> tuple[str, tuple]:
-        return ("Ҳа", (30, 90, 55)) if ok else ("Йўқ", (120, 40, 40))
+        return ("Да", (30, 90, 55)) if ok else ("Нет", (120, 40, 40))
 
     iy = y + 20 * SCALE
-    for lbl, ok in [("Остаток", data.counted_ok), ("Жой", data.location_ok)]:
+    for lbl, ok in [("Остаток", data.counted_ok), ("Место", data.location_ok)]:
         t, col = yn(ok)
         draw.text((M + 28 * SCALE, iy), f"{lbl}:", fill=white, font=font_small)
         draw.text((M + 150 * SCALE, iy), t, fill=col, font=font_main)
@@ -261,7 +261,7 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
         t, col = yn(1 if data.fixed_now else 0)
         draw.text(
             (M + 28 * SCALE, iy),
-            f"Хато жой: {data.wrong_location_count}  ·  Тузатилди: {t}",
+            f"Ошибочных мест: {data.wrong_location_count}  ·  Исправлено: {t}",
             fill=col,
             font=font_small,
         )
@@ -269,7 +269,7 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
     if data.comment and data.comment != "-":
         draw.text(
             (M + 28 * SCALE, iy),
-            f"Изоҳ: {_truncate(data.comment, 50)}",
+            f"Комментарий: {_truncate(data.comment, 50)}",
             fill=muted,
             font=font_small,
         )
@@ -288,7 +288,7 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
             outline=theme["accent"],
             width=2 * SCALE,
         )
-        draw.text((M + 28 * SCALE, y + 12 * SCALE), "Саналган папкалар", fill=theme["accent"], font=font_small)
+        draw.text((M + 28 * SCALE, y + 12 * SCALE), "Пересчитанные папки", fill=theme["accent"], font=font_small)
         ly = y + 40 * SCALE
         current = data.folder_name.strip()
         start_n = len(folders) - len(shown) + 1
@@ -300,7 +300,7 @@ def render_report_card(data: ReportCardData, *, theme_key: str | None = None) ->
             draw.text((M + 28 * SCALE, ly), line, fill=col, font=font_small)
             ly += LIST_LINE * SCALE
         if hidden > 0:
-            draw.text((M + 28 * SCALE, ly), f"… ва яна {hidden} та (юқорида)", fill=muted, font=font_small)
+            draw.text((M + 28 * SCALE, ly), f"… и ещё {hidden} (выше)", fill=muted, font=font_small)
             ly += LIST_LINE * SCALE
         content_bottom = y + list_h
 

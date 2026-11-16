@@ -15,7 +15,8 @@ FARRUX = "Ражаббоев Пулат"
 PULAT = FARRUX
 OZODBek = "Ibodullaev Shoxijaxon"
 SHOXIJAXON = OZODBek
-SINDOR = "Рузибоев Синдор"
+DILNOZA = "Azatova Dilnoza"
+SINDOR = DILNOZA  # legacy constant name in MANUAL_TRANSFERS
 MUSLIMBEK = "Тохиров Муслимбек"
 RAVSHANOV = "Равшанов Зиёдулло"
 

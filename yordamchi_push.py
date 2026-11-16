@@ -111,6 +111,12 @@ async def push_to_yordamchi_hub(
         return False, "tg_id yo'q"
     if not text and not et:
         return False, "matn yoki event_type kerak"
+    try:
+        from employee_registry import canonical_tg_id
+
+        tg_id = int(canonical_tg_id(int(tg_id)) or int(tg_id))
+    except Exception:
+        tg_id = int(tg_id)
     day = day_iso or today_iso()
     payload: dict = {
         "tg_id": int(tg_id),
