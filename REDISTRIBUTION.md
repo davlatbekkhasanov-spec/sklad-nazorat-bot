@@ -11,7 +11,7 @@
 | Rajabboev Pulat | 28 |
 | Ibodullaev Shoxijaxon | 17 |
 | Ravshanov Ziyodullo | 22 |
-| Ruziboev Sindor | 52 |
+| Azatova Dilnoza | 52 |
 | Toxirov Muslimbek | 28 |
 | Mustafoev Abdullo | 28 |
 | **Jami** | **175** |

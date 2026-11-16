@@ -127,7 +127,9 @@ if not GROUP_ID:
 
 
 from employee_registry import (
+    CANONICAL_DILNOZA,
     CANONICAL_PULAT,
+    DILNOZA_TG_ID,
     SHOXIJAXON_TG_ID,
     SKLAD_PULAT_NAME,
     migrate_sqlite_employee_row,
@@ -142,7 +144,7 @@ ACTIVE_SKLAD_EMPLOYEE_NAMES: frozenset[str] = frozenset(
         "Тохиров Муслимбек",
         "Равшанов Зиёдулло",
         "Мустафоев Абдулло",
-        "Рузибоев Синдор",
+        "Azatova Dilnoza",
     }
 )
 
@@ -154,7 +156,7 @@ DEFAULT_PASSWORDS = {
         "Тохиров Муслимбек": "295731",
         "Равшанов Зиёдулло": "816452",
         "Мустафоев Абдулло": "540927",
-        "Рузибоев Синдор": "673184",
+        "Azatova Dilnoza": "673184",
     }.items()
     if name in ACTIVE_SKLAD_EMPLOYEE_NAMES
 }
@@ -177,9 +179,10 @@ LEGACY_INACTIVE_EMPLOYEE_NAMES: tuple[str, ...] = (
     "Samadov To'lqin",
     "Samadov Tulqin",
     "Anvarov Daurbek",
-    "Azatova Dilnoza",
+    "Рузибоев Синдор",
     "Ruziboev Sindor",
     "Ruziboev sindorbek",
+    "Ruziboev Sindorbek",
     "Zaynitdinov Diyorbek",
     "Mustafoev Abdullo",
     "Abdullo Mustafoyev",
@@ -195,8 +198,6 @@ SKLAD_DB_CANONICAL_NAMES: dict[str, str] = {
     "Rajabboev Pulat": "Ражаббоев Пулат",
     "Rahabboev Pulat": "Ражаббоев Пулат",
     "Toxirov Muslimbek": "Тохиров Муслимбек",
-    "Ruziboev Sindor": "Рузибоев Синдор",
-    "Ruziboev sindorbek": "Рузибоев Синдор",
 }
 
 
@@ -778,6 +779,7 @@ def setup_db():
     _migrate_shoxijaxon_telegram(cursor)
     _migrate_shoxijaxon_assignments(cursor)
     _migrate_canonical_db_names(cursor)
+    _migrate_dilnoza_replaces_sindor(cursor)
     deactivated = _migrate_deactivate_legacy_staff(cursor)
     if deactivated:
         logging.info("Deactivated legacy/inactive employees: %s", ", ".join(deactivated))
@@ -797,6 +799,62 @@ def _migrate_canonical_db_names(cursor) -> None:
             "UPDATE employees SET name = ? WHERE name = ?",
             (new, old),
         )
+
+
+def _migrate_dilnoza_replaces_sindor(cursor) -> None:
+    """Sindor papkalari → Azatova Dilnoza; Sindor deactivate."""
+    canon = CANONICAL_DILNOZA
+    sindor_names = (
+        "Рузибоев Синдор",
+        "Ruziboev Sindor",
+        "Ruziboev sindorbek",
+        "Ruziboev Sindorbek",
+    )
+
+    cursor.execute("SELECT id FROM employees WHERE name = ? LIMIT 1", (canon,))
+    dil_row = cursor.fetchone()
+    if not dil_row:
+        pwd = DEFAULT_PASSWORDS.get(canon, "673184")
+        cursor.execute(
+            """
+            INSERT INTO employees (name, role, is_active, created_at, password, telegram_id)
+            VALUES (?, 'employee', 1, ?, ?, ?)
+            """,
+            (canon, now_str(), pwd, DILNOZA_TG_ID),
+        )
+        dil_id = int(cursor.lastrowid)
+    else:
+        dil_id = int(dil_row["id"])
+        cursor.execute(
+            "UPDATE employees SET is_active = 1, password = COALESCE(NULLIF(password, ''), ?), telegram_id = ? WHERE id = ?",
+            (DEFAULT_PASSWORDS.get(canon, "673184"), DILNOZA_TG_ID, dil_id),
+        )
+
+    for old_name in sindor_names:
+        cursor.execute("SELECT id FROM employees WHERE name = ? AND id != ?", (old_name, dil_id))
+        for row in cursor.fetchall():
+            old_id = int(row["id"])
+            cursor.execute(
+                """
+                DELETE FROM assignments
+                WHERE employee_id = ? AND folder_id IN (
+                    SELECT folder_id FROM assignments WHERE employee_id = ?
+                )
+                """,
+                (old_id, dil_id),
+            )
+            cursor.execute(
+                "UPDATE assignments SET employee_id = ? WHERE employee_id = ?",
+                (dil_id, old_id),
+            )
+            cursor.execute(
+                "UPDATE auth_sessions SET employee_id = ? WHERE employee_id = ?",
+                (dil_id, old_id),
+            )
+            cursor.execute(
+                "UPDATE employees SET is_active = 0, telegram_id = NULL WHERE id = ?",
+                (old_id,),
+            )
 
 
 def _migrate_deactivate_legacy_staff(cursor) -> list[str]:

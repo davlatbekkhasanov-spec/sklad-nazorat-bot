@@ -391,6 +391,8 @@ def sklad_employee_name(name: str) -> str:
         return SKLAD_SHOXIJAXON_NAME
     if is_tuvalov_legacy(raw) or is_pulat_name(raw) or raw in TUVALOV_DISPLAY_NAMES + PULAT_DISPLAY_NAMES:
         return SKLAD_PULAT_NAME
+    if is_sindor_legacy(raw) or _alias_key(raw) == "рузибоев синдор":
+        return CANONICAL_DILNOZA
     return raw
 
 
